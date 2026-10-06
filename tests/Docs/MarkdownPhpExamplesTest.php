@@ -20,9 +20,12 @@ final class MarkdownPhpExamplesTest extends TestCase
         foreach ($documents as $document) {
             $markdown = file_get_contents($document);
             self::assertNotFalse($markdown, 'Could not read ' . basename($document));
-            preg_match_all('/^```php[^\n]*\n(.*?)^```\s*$/ms', $markdown, $matches);
+            preg_match_all('/^```php([^\n]*)\n(.*?)^```\s*$/ms', $markdown, $matches);
 
-            foreach ($matches[1] as $index => $example) {
+            foreach ($matches[2] as $index => $example) {
+                // Blocks tagged `php laravel` use the framework, which this package does not depend on: they are
+                // syntax-checked here and were type-checked in a Laravel application when written.
+                $laravel = str_contains($matches[1][$index], 'laravel');
                 $file = tempnam(sys_get_temp_dir(), 'anis-php-doc-');
                 self::assertNotFalse($file, 'Could not create a temporary PHP example file.');
                 try {
@@ -36,6 +39,10 @@ final class MarkdownPhpExamplesTest extends TestCase
                     fclose($pipes[2]);
                     $exitCode = proc_close($process);
                     self::assertSame(0, $exitCode, basename($document) . ' PHP block ' . ($index + 1) . " failed php -l:\n" . $stdout . $stderr);
+                    if ($laravel) {
+                        $checked++;
+                        continue;
+                    }
 
                     $imports = [];
                     preg_match_all('/^use [^;]+;\s*$/m', $source, $importMatches);

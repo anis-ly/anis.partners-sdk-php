@@ -77,7 +77,7 @@ match (true) {
 ```
 
 Read [Getting started](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/getting-started.md) before enrolling a key, then read [Orders and recovery](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/orders-and-recovery.md)
-before moving money. The PHP example is in [samples/console](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/samples/console/README.md).
+before moving money. Using Laravel? See [Using the SDK with Laravel](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/laravel.md). The PHP example is in [samples/console](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/samples/console/README.md).
 
 ## Refusals built into the design
 
