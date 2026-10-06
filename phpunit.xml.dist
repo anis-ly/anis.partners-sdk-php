@@ -10,6 +10,10 @@
          failOnEmptyTestSuite="true"
          beStrictAboutOutputDuringTests="true"
          cacheDirectory=".phpunit.cache">
+    <php>
+        <!-- Production PHP drops call arguments from traces; the tests that prove secrets are redacted in traces need them kept. -->
+        <ini name="zend.exception_ignore_args" value="0"/>
+    </php>
     <testsuites>
         <testsuite name="sdk">
             <directory>tests</directory>
