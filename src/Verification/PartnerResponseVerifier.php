@@ -10,22 +10,24 @@ use Anis\Partners\Observability\Log;
 use Anis\Partners\Signing\EcdsaSignatureFormat;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /** Verifies Anis response signatures and refuses any response that fails the published rules. */
 final class PartnerResponseVerifier
 {
     /**
      * Supplies response keys and a clock so key-cache age and signature freshness share one time source.
-     * Keeps these public partner values stable after construction.
+     *
      */
     public function __construct(
         private readonly SigningKeySource $keys,
         private readonly ClockInterface $clock,
         private readonly ?LoggerInterface $logger = null,
+        private readonly string $clientName = 'default',
     ) {}
 
     /** Throws a reason-only refusal unless status, headers, digest, time, key, and signature all agree. */
-    public function verify(VerifiableResponse $response): void
+    public function verify(#[\SensitiveParameter] VerifiableResponse $response): void
     {
         $signatureInput = $response->header('Signature-Input');
         $signature = $response->header('Signature');
@@ -36,7 +38,8 @@ final class PartnerResponseVerifier
         if ($parsed === null) {
             $this->fail(ResponseVerificationFailure::SignatureMalformed);
         }
-        if ($parsed['label'] !== PartnerResponseSignatureBase::LABEL) {
+        $signatureLabelEnd = strpos($signature, '=');
+        if ($parsed['label'] !== PartnerResponseSignatureBase::LABEL || $signatureLabelEnd === false || substr($signature, 0, $signatureLabelEnd) !== PartnerResponseSignatureBase::LABEL) {
             $this->fail(ResponseVerificationFailure::LabelUnexpected);
         }
         if ($parsed['algorithm'] !== null && $parsed['algorithm'] !== PartnerResponseSignatureBase::ALGORITHM) {
@@ -47,7 +50,7 @@ final class PartnerResponseVerifier
         $computedDigest = 'sha-256=:' . base64_encode(hash('sha256', $response->body, true)) . ':';
         // The signature covers the digest header, so compare it to the received body before cryptographic checks.
         $contentEncoding = $response->header('Content-Encoding');
-        if (($contentEncoding !== null && strtolower(trim($contentEncoding)) !== 'identity')
+        if (($contentEncoding !== null && trim($contentEncoding) !== '' && strtolower(trim($contentEncoding)) !== 'identity')
             || $contentDigest === null || !hash_equals($computedDigest, $contentDigest)) {
             $this->fail(ResponseVerificationFailure::ContentDigestMismatch);
         }
@@ -83,12 +86,12 @@ final class PartnerResponseVerifier
         $document = $this->keys->get();
         $key = $this->resolve($document, $parsed['keyId']);
         if ($key === null) {
-            Log::write($this->logger ?? new \Psr\Log\NullLogger(), 'warning', 'Anis used a signing key this client has not seen; refreshing once', 1006, ['key_id' => $parsed['keyId']]);
+            Log::write($this->logger ?? new NullLogger(), 'warning', 'Anis used an unknown signing key; refreshing once for key {key_id}', 1006, ['key_id' => $parsed['keyId']]);
             $document = $this->keys->refresh();
             $key = $this->resolve($document, $parsed['keyId']);
         }
         foreach ($document->keys as $candidate) {
-            if ($candidate->d !== null && $candidate->d !== '') {
+            if ($candidate->hasPrivateMember) {
                 $this->fail(ResponseVerificationFailure::KeyRejected);
             }
         }
@@ -124,7 +127,7 @@ final class PartnerResponseVerifier
     private function resolve(SigningKeySet $document, string $keyId): ?PartnerJwk
     {
         foreach ($document->keys as $key) {
-            if ($key->kid === $keyId && $key->x !== null && $key->y !== null) {
+            if ($key->kid === $keyId && $key->x !== null && $key->x !== '' && $key->y !== null && $key->y !== '') {
                 return $key;
             }
         }
@@ -132,7 +135,7 @@ final class PartnerResponseVerifier
         return null;
     }
 
-    private function coordinate(?string $value): ?string
+    private function coordinate(#[\SensitiveParameter] ?string $value): ?string
     {
         if ($value === null || $value === '') {
             return null;
@@ -142,7 +145,7 @@ final class PartnerResponseVerifier
         return $decoded !== null && strlen($decoded) === 32 ? $decoded : null;
     }
 
-    private function signatureBytes(string $signature): ?string
+    private function signatureBytes(#[\SensitiveParameter] string $signature): ?string
     {
         if (preg_match('/\Asig1=:([A-Za-z0-9+\/=]*):\z/D', $signature, $matches) !== 1) {
             return null;
@@ -154,8 +157,8 @@ final class PartnerResponseVerifier
 
     private function fail(ResponseVerificationFailure $failure): never
     {
-        AnisPartnersTelemetry::verificationFailure($failure->value);
-        Log::write($this->logger ?? new \Psr\Log\NullLogger(), 'error', 'Anis response discarded because it could not be verified', 1003, ['failure' => $failure->value]);
+        AnisPartnersTelemetry::verificationFailure($failure->value, $this->clientName);
+        Log::write($this->logger ?? new NullLogger(), 'error', 'Anis response discarded because verification failed: {failure}', 1003, ['failure' => $failure->value]);
         throw new UnverifiableResponseException($failure);
     }
 

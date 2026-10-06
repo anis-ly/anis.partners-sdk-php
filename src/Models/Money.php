@@ -10,14 +10,14 @@ final readonly class Money implements \JsonSerializable
     public int $thousandths;
     public string $currency;
     public ?\DateTimeImmutable $asOf;
-    /** Keeps these public partner values stable after construction. */
+
     public function __construct(
         mixed $thousandths,
         mixed $currency,
         ?\DateTimeImmutable $asOf = null,
     ) {
         if (!is_int($thousandths) || !is_string($currency)) {
-            throw new \InvalidArgumentException('Money requires integer thousandths and a string currency.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money requires integer thousandths and a string currency.');
         }
         $this->thousandths = $thousandths;
         $this->currency = $currency;
@@ -34,14 +34,14 @@ final readonly class Money implements \JsonSerializable
         $amount = self::decimalString($amount);
         $currency = self::currencyString($currency);
         if (preg_match('/\A([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))\z/D', $amount, $matches) !== 1) {
-            throw new \InvalidArgumentException('Money amounts must be decimal strings.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money amounts must be decimal strings.');
         }
 
         $whole = ltrim($matches[2] ?? '0', '0');
         $whole = $whole === '' ? '0' : $whole;
         $fraction = ($matches[3] ?? '') !== '' ? $matches[3] : ($matches[4] ?? '');
         if (strlen($fraction) > 3) {
-            throw new \InvalidArgumentException('Anis amounts have at most three decimal places');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Anis amounts have at most three decimal places');
         }
 
         $threePlaces = str_pad($fraction, 3, '0');
@@ -50,7 +50,7 @@ final readonly class Money implements \JsonSerializable
         $negativeLimit = self::incrementDigits((string) PHP_INT_MAX);
         $limit = $matches[1] === '-' ? $negativeLimit : (string) PHP_INT_MAX;
         if (self::compareDigits($scaled, $limit) > 0) {
-            throw new \InvalidArgumentException('The money amount exceeds the supported integer range.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The money amount exceeds the supported integer range.');
         }
         if ($matches[1] === '-' && $scaled === $negativeLimit) {
             $units = PHP_INT_MIN;
@@ -73,7 +73,7 @@ final readonly class Money implements \JsonSerializable
         $amount = $data['amount'] ?? null;
         $currency = $data['currency'] ?? null;
         if (!is_string($amount) || !is_string($currency)) {
-            throw new \UnexpectedValueException('Money amount and currency must be strings.');
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('Money amount and currency must be strings.');
         }
         $asOf = ModelData::dateTime($data, 'asOf');
         $money = self::of(self::decimalString($amount), $currency);
@@ -85,19 +85,19 @@ final readonly class Money implements \JsonSerializable
     public function multiply(mixed $quantity): self
     {
         if (!is_int($quantity)) {
-            throw new \InvalidArgumentException('Money multiplication quantity must be an integer.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money multiplication quantity must be an integer.');
         }
         if ($quantity === -1 && $this->thousandths === PHP_INT_MIN) {
-            throw new \OverflowException('The money multiplication exceeds the supported integer range.');
+            throw new \Anis\Partners\Errors\AnisPartnersOverflowException('The money multiplication exceeds the supported integer range.');
         }
         if ($quantity > 0 && ($this->thousandths > intdiv(PHP_INT_MAX, $quantity) || $this->thousandths < intdiv(PHP_INT_MIN, $quantity))) {
-            throw new \OverflowException('The money multiplication exceeds the supported integer range.');
+            throw new \Anis\Partners\Errors\AnisPartnersOverflowException('The money multiplication exceeds the supported integer range.');
         }
         if ($quantity < -1 && $this->thousandths > 0 && $this->thousandths > intdiv(PHP_INT_MIN, $quantity)) {
-            throw new \OverflowException('The money multiplication exceeds the supported integer range.');
+            throw new \Anis\Partners\Errors\AnisPartnersOverflowException('The money multiplication exceeds the supported integer range.');
         }
         if ($quantity < -1 && $this->thousandths < 0 && $this->thousandths < intdiv(PHP_INT_MAX, $quantity)) {
-            throw new \OverflowException('The money multiplication exceeds the supported integer range.');
+            throw new \Anis\Partners\Errors\AnisPartnersOverflowException('The money multiplication exceeds the supported integer range.');
         }
 
         return new self($this->thousandths * $quantity, $this->currency);
@@ -174,10 +174,10 @@ final readonly class Money implements \JsonSerializable
     private static function decimalString(mixed $amount): string
     {
         if (!is_string($amount)) {
-            throw new \InvalidArgumentException('Money amounts must be supplied as decimal strings.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money amounts must be supplied as decimal strings.');
         }
         if (!is_numeric($amount) || preg_match('/\A[+-]?(?:(?:\d+)(?:\.\d*)?|\.\d+)\z/D', $amount) !== 1) {
-            throw new \InvalidArgumentException('Money amounts must be decimal strings.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money amounts must be decimal strings.');
         }
 
         return $amount;
@@ -186,7 +186,7 @@ final readonly class Money implements \JsonSerializable
     private static function currencyString(mixed $currency): string
     {
         if (!is_string($currency)) {
-            throw new \InvalidArgumentException('Money currency must be supplied as a string.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money currency must be supplied as a string.');
         }
 
         return $currency;

@@ -17,30 +17,30 @@ final class PartnerRequestSignatureBase
      * Renders signature parameters in protocol order; changing their spelling makes the signature unverifiable.
      * @param list<string> $components
      */
-    public static function parameters(array $components, int $created, int $expires, string $keyId, ?string $nonce = null): string
+    public static function parameters(array $components, int $created, int $expires, string $keyId, #[\SensitiveParameter] ?string $nonce = null): string
     {
         if ($expires - $created > self::MAX_SIGNATURE_LIFETIME_SECONDS) {
-            throw new \InvalidArgumentException('A request signature may live at most 300 seconds.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('A request signature may live at most 300 seconds.');
         }
         if ($nonce !== null && ($nonce === '' || preg_match('/["\\\\\x00-\x1F\x7F]/', $nonce) === 1)) {
-            throw new \InvalidArgumentException('A nonce must be a non-empty structured-field string without quotes, backslashes, or controls.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('A nonce must be a non-empty structured-field string without quotes, backslashes, or controls.');
         }
 
         $ids = array_map(static fn(string $component): string => '"' . $component . '"', $components);
         $parameters = '(' . implode(' ', $ids) . ');created=' . $created . ';expires=' . $expires
-            . ';keyid="' . Uuid::canonical($keyId) . '";alg="' . self::ALGORITHM . '"';
+            . ';keyid="' . Uuid::canonical($keyId, 'key id') . '";alg="' . self::ALGORITHM . '"';
 
         return $parameters . ($nonce === null ? '' : ';nonce="' . $nonce . '"');
     }
 
     /** Adds the protocol label required by the Signature-Input field. */
-    public static function signatureInputHeader(string $parameters): string
+    public static function signatureInputHeader(#[\SensitiveParameter] string $parameters): string
     {
         return self::LABEL . '=' . $parameters;
     }
 
     /** Encodes the raw P1363 signature in the structured Signature field. */
-    public static function signatureHeader(string $signature): string
+    public static function signatureHeader(#[\SensitiveParameter] string $signature): string
     {
         return self::LABEL . '=:' . base64_encode($signature) . ':';
     }
@@ -49,7 +49,7 @@ final class PartnerRequestSignatureBase
      * Builds the byte-for-byte signature base, including its required final line.
      * @param list<string> $components
      */
-    public static function build(array $components, SignatureInputs $inputs, string $parameters): string
+    public static function build(array $components, #[\SensitiveParameter] SignatureInputs $inputs, #[\SensitiveParameter] string $parameters): string
     {
         $lines = [];
         foreach ($components as $component) {

@@ -18,11 +18,13 @@ final class WalletOperations extends AbstractOperations
     public function list(): \Generator
     {
         $cursor = null;
+        $seenCursors = [];
         do {
             $page = $this->listPage($cursor);
             foreach ($page->items as $item) {
                 yield $item;
             }
+            $this->ensureCursorProgress($page->nextCursor, $seenCursors);
             $cursor = $page->nextCursor;
         } while ($cursor !== null && $cursor !== '');
     }
@@ -37,7 +39,7 @@ final class WalletOperations extends AbstractOperations
     /** Reads one granted wallet by canonical identifier. */
     public function get(string $walletId): Wallet
     {
-        $id = Uuid::canonical($walletId);
+        $id = Uuid::canonical($walletId, 'wallet id');
         /** @var Wallet */
         return $this->fetchModel($this->transport, '/v1/wallets/{walletId}', 'v1/wallets/' . $id, [Wallet::class, 'fromArray']);
     }

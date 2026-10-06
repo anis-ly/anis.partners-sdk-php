@@ -34,6 +34,7 @@ final class EnrollmentClient
     public static function create(
         string $authority,
         string $invitationId,
+        #[\SensitiveParameter]
         string $enrollmentToken,
         ?ClientInterface $http = null,
         ?RequestFactoryInterface $requests = null,
@@ -42,17 +43,17 @@ final class EnrollmentClient
         ?ClockInterface $clock = null,
         ?LoggerInterface $logger = null,
     ): self {
-        $invitationId = Uuid::canonical($invitationId);
-        if (trim($enrollmentToken) === '') {
-            throw new \InvalidArgumentException('An enrollment token is required.');
+        $invitationId = Uuid::canonical($invitationId, 'invitation id');
+        if (preg_match('/\A[\x21-\x7E]+\z/D', $enrollmentToken) !== 1) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The enrollment token must contain only visible ASCII characters.');
         }
         $http ??= Psr18ClientDiscovery::find();
         $requests ??= Psr17FactoryDiscovery::findRequestFactory();
         $streams ??= Psr17FactoryDiscovery::findStreamFactory();
         $clock ??= new \Anis\Partners\Internal\SystemClock();
         $options = new ClientOptions($authority, 60, AcceptLanguage::Unspecified, 600);
-        $keys = new HttpSigningKeySource($http, $requests, $authority, 600, $keyCache, $clock, $logger);
-        $transport = (new PartnerTransport($http, $requests, $streams, $options, null, new PartnerResponseVerifier($keys, $clock, $logger), $clock, $logger))
+        $keys = new HttpSigningKeySource($http, $requests, $authority, 600, $keyCache, $clock, $logger, $options->name);
+        $transport = (new PartnerTransport($http, $requests, $streams, $options, null, new PartnerResponseVerifier($keys, $clock, $logger, $options->name), $clock, $logger))
             ->withEnrollmentToken($enrollmentToken);
 
         return new self($transport, $invitationId);
@@ -61,13 +62,15 @@ final class EnrollmentClient
     /** Reads the invitation before a key is submitted. */
     public function get(): EnrollmentState
     {
-        return EnrollmentState::fromArray($this->transport->request('GET', '/v1/enrollments/{invitationId}', 'v1/enrollments/' . $this->invitationId, null, enrollment: true)->json);
+        /** @var EnrollmentState */
+        return $this->hydrate([EnrollmentState::class, 'fromArray'], $this->transport->request('GET', '/v1/enrollments/{invitationId}', 'v1/enrollments/' . $this->invitationId, null, enrollment: true)->json);
     }
 
     /** Reads enrollment approval and key expiry state, including omitted early-step values. */
     public function getStatus(): EnrollmentStatus
     {
-        return EnrollmentStatus::fromArray($this->transport->request('GET', '/v1/enrollments/{invitationId}/status', 'v1/enrollments/' . $this->invitationId . '/status', null, enrollment: true)->json);
+        /** @var EnrollmentStatus */
+        return $this->hydrate([EnrollmentStatus::class, 'fromArray'], $this->transport->request('GET', '/v1/enrollments/{invitationId}/status', 'v1/enrollments/' . $this->invitationId . '/status', null, enrollment: true)->json);
     }
 
     /** Submits a public key and returns a locally derived safety code only after thumbprints match. */
@@ -75,7 +78,8 @@ final class EnrollmentClient
     {
         $local = KeyThumbprint::compute($request->publicJwk);
         $answer = $this->transport->request('POST', '/v1/enrollments/{invitationId}/keys', 'v1/enrollments/' . $this->invitationId . '/keys', null, $request->toJson(), enrollment: true);
-        $result = EnrollmentKeyResult::fromArray($answer->json);
+        /** @var EnrollmentKeyResult $result */
+        $result = $this->hydrate([EnrollmentKeyResult::class, 'fromArray'], $answer->json);
         if ($result->thumbprint === null || !hash_equals($local, $result->thumbprint)) {
             throw new EnrollmentKeyMismatchException($local, $result->thumbprint);
         }
@@ -86,18 +90,33 @@ final class EnrollmentClient
     /** Sends the proof request after Anis has verified it. */
     public function submitProof(EnrollmentProofRequest $request): EnrollmentStatus
     {
-        return EnrollmentStatus::fromArray($this->transport->request('POST', '/v1/enrollments/{invitationId}/proof', 'v1/enrollments/' . $this->invitationId . '/proof', null, $request->toJson(), enrollment: true)->json);
+        /** @var EnrollmentStatus */
+        return $this->hydrate([EnrollmentStatus::class, 'fromArray'], $this->transport->request('POST', '/v1/enrollments/{invitationId}/proof', 'v1/enrollments/' . $this->invitationId . '/proof', null, $request->toJson(), enrollment: true)->json);
     }
 
     /** Builds and submits proof of possession for the submitted public key. */
-    public function prove(EnrollmentKeyResult $submitted, P256Signer $signer): EnrollmentStatus
+    public function prove(#[\SensitiveParameter] EnrollmentKeyResult $submitted, P256Signer $signer): EnrollmentStatus
     {
-        if ($submitted->challenge === null || $submitted->thumbprint === null || $submitted->challengeGeneration === null) {
-            throw new \InvalidArgumentException('The submitted key result must include its challenge, thumbprint, and generation.');
+        if (($submitted->challenge === null || $submitted->challenge === '') || $submitted->thumbprint === null || $submitted->challengeGeneration === null) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The submitted key result must include its challenge, thumbprint, and generation.');
         }
         $message = EnrollmentProof::message($submitted->keyId, $submitted->challengeGeneration, $submitted->challenge, $submitted->thumbprint);
         $request = new EnrollmentProofRequest($submitted->keyId, $submitted->challengeGeneration, EnrollmentProof::signature($message, $signer));
 
         return $this->submitProof($request);
+    }
+
+    /** @template T of EnrollmentState|EnrollmentStatus|EnrollmentKeyResult
+     * @param callable(array<array-key, mixed>): T $factory
+     * @param array<array-key, mixed> $data
+     * @return T
+     */
+    private function hydrate(callable $factory, #[\SensitiveParameter] array $data): EnrollmentState|EnrollmentStatus|EnrollmentKeyResult
+    {
+        try {
+            return $factory($data);
+        } catch (\Throwable) {
+            throw new \Anis\Partners\Errors\MalformedResponseException('The verified enrollment answer does not match the expected model.');
+        }
     }
 }

@@ -20,6 +20,7 @@ final readonly class Order implements \JsonSerializable
         public ?string $cardId = null,
         public ?int $quantity = null,
         public ?Money $total = null,
+        #[\SensitiveParameter]
         public ?array $soldCards = null,
         public ?\DateTimeImmutable $completedAt = null,
         public ?string $externalReference = null,
@@ -31,24 +32,21 @@ final readonly class Order implements \JsonSerializable
      * Reads optional order fields as absent values, never fabricated defaults.
      * @param array<array-key, mixed> $data
      */
-    public static function fromArray(array $data): self
+    public static function fromArray(#[\SensitiveParameter] array $data): self
     {
         $total = ModelData::object($data, 'total');
         $soldCards = null;
         if (array_key_exists('soldCards', $data) && $data['soldCards'] !== null) {
-            $soldCards = array_map(
-                static fn(array $item): RevealedCredential => RevealedCredential::fromArray($item),
-                ModelData::objectList($data, 'soldCards'),
-            );
+            $soldCards = self::credentials(ModelData::objectList($data, 'soldCards'));
         }
         $withheld = $data['codesWithheld'] ?? null;
         if ($withheld !== null && !is_bool($withheld)) {
-            throw new \UnexpectedValueException('The codesWithheld model member must be a boolean or null.');
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('The codesWithheld model member must be a boolean or null.');
         }
 
         return new self(
             ModelData::uuid($data, 'operationId'),
-            OrderStatus::parse(ModelData::nullableString($data, 'status')),
+            OrderStatus::parse($data['status'] ?? null),
             ModelData::nullableUuid($data, 'invoiceId'),
             ModelData::nullableUuid($data, 'walletId'),
             ModelData::nullableUuid($data, 'cardId'),
@@ -62,6 +60,22 @@ final readonly class Order implements \JsonSerializable
         );
     }
 
+    /** @param list<array<array-key, mixed>> $items
+     *  @return list<RevealedCredential>
+     */
+    private static function credentials(#[\SensitiveParameter] array $items): array
+    {
+        $credentials = [];
+        foreach ($items as $item) {
+            $credentials[] = RevealedCredential::fromArray($item);
+        }
+
+        return $credentials;
+    }
+
+    /** Rebuilds a diagnostic order without its credential collection.
+     * @param array<array-key, mixed> $properties
+     */
     /** Hides credential-bearing sold-card details when an order is inspected. */
     public function __debugInfo(): array
     {

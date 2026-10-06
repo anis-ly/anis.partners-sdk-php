@@ -9,7 +9,6 @@ use Anis\Partners\Verification\PartnerJwk;
 /** Submits a public key and the validity window requested for its enrollment. */
 final readonly class EnrollmentKeyRequest implements \JsonSerializable
 {
-    /** Keeps these public partner values stable after construction. */
     public function __construct(
         public PartnerJwk $publicJwk,
         public \DateTimeImmutable $notBefore,
@@ -26,7 +25,7 @@ final readonly class EnrollmentKeyRequest implements \JsonSerializable
         $notBefore = ModelData::dateTime($data, 'notBefore');
         $expiresAt = ModelData::dateTime($data, 'expiresAt');
         if ($jwk === null || $notBefore === null || $expiresAt === null) {
-            throw new \UnexpectedValueException('An enrollment key request requires a public key and both dates.');
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('An enrollment key request requires a public key and both dates.');
         }
 
         return new self(PartnerJwk::fromArray($jwk), $notBefore, $expiresAt);
@@ -42,7 +41,7 @@ final readonly class EnrollmentKeyRequest implements \JsonSerializable
         foreach (['kty', 'crv', 'x', 'y'] as $member) {
             $value = $this->publicJwk->{$member};
             if ($value === null) {
-                throw new \InvalidArgumentException('An enrollment request must contain a complete public P-256 JWK.');
+                throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('An enrollment request must contain a complete public P-256 JWK.');
             }
             $jwk[$member] = $value;
         }

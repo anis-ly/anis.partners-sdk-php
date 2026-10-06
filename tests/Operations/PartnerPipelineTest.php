@@ -6,15 +6,20 @@ namespace Anis\Partners\Tests\Operations;
 
 use Anis\Partners\AnisPartnersClient;
 use Anis\Partners\ClientOptions;
+use Anis\Partners\Internal\Base64Url;
 use Anis\Partners\Models\CreateOrderRequest;
+use Anis\Partners\Models\MaskedCard;
 use Anis\Partners\Models\Money;
 use Anis\Partners\Models\OrderCompleted;
 use Anis\Partners\Models\RevealedCredential;
 use Anis\Partners\Models\RevealedCredentialCollection;
 use Anis\Partners\Models\SignatureDiagnostic;
+use Anis\Partners\Signing\EcdsaSignatureFormat;
 use Anis\Partners\Signing\RequestSigner;
 use Anis\Partners\Signing\SignatureProfile;
+use Anis\Partners\Tests\Support\FixedNonceFactory;
 use Anis\Partners\Tests\Support\SignedFakeWire;
+use Anis\Partners\Verification\PartnerJwk;
 use Anis\Partners\Verification\UnverifiableResponseException;
 use GuzzleHttp\Psr7\HttpFactory;
 use PHPUnit\Framework\Attributes\Test;
@@ -40,6 +45,9 @@ final class PartnerPipelineTest extends TestCase
         self::assertSame('', $request->getHeaderLine('Content-Digest'));
         self::assertSame('', (string) $request->getBody());
         self::assertSame('identity', $request->getHeaderLine('Accept-Encoding'));
+        self::assertMatchesRegularExpression('/\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\z/', $request->getHeaderLine('X-Anis-Date'));
+        self::assertSame('', $request->getHeaderLine('Authorization'));
+        self::assertSame('', $request->getHeaderLine('Content-Type'));
     }
 
     #[Test]
@@ -99,6 +107,24 @@ final class PartnerPipelineTest extends TestCase
     }
 
     #[Test]
+    public function it_uses_the_injected_nonce_factory_for_mutations(): void
+    {
+        $wire = new SignedFakeWire();
+        $factory = new HttpFactory();
+        $client = AnisPartnersClient::create(
+            new ClientOptions('https://partners.example'),
+            $wire->requestSigner(),
+            $wire,
+            $factory,
+            $factory,
+            nonceFactory: new FixedNonceFactory('fixed-nonce'),
+        );
+        $client->ownedCards()->reveal(self::WALLET, self::CARD);
+
+        self::assertSame('fixed-nonce', $wire->requests[0]->getHeaderLine('Nonce'));
+    }
+
+    #[Test]
     public function it_sends_an_invoice_reveal_with_no_body_bytes(): void
     {
         $wire = new SignedFakeWire();
@@ -135,6 +161,64 @@ final class PartnerPipelineTest extends TestCase
     }
 
     #[Test]
+    public function it_signs_the_exact_order_request_bytes_received_by_the_http_client(): void
+    {
+        $wire = new SignedFakeWire();
+        $wire->status = 201;
+        $wire->body = '{"operationId":"' . self::OPERATION . '","status":"completed"}';
+        self::client($wire)->orders()->create(self::WALLET, self::OPERATION, self::order());
+
+        $request = $wire->requests[0];
+        $signatureInput = $request->getHeaderLine('Signature-Input');
+        $inputParts = [];
+        if (preg_match('/\\Asig1=\\(([^)]*)\\)(;.*)\\z/', $signatureInput, $inputParts) !== 1) {
+            throw new \UnexpectedValueException('The request signature input is malformed.');
+        }
+        preg_match_all('/"([^"]+)"/', $inputParts[1], $componentMatches);
+        $components = $componentMatches[1];
+        $uri = $request->getUri();
+        $port = $uri->getPort();
+        $scheme = strtolower($uri->getScheme());
+        $authority = strtolower($uri->getHost() . ((($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80) || $port === null) ? '' : ':' . $port));
+        $values = [
+            '@method' => strtoupper($request->getMethod()),
+            '@authority' => $authority,
+            '@path' => $uri->getPath() === '' ? '/' : $uri->getPath(),
+            '@query' => $uri->getQuery() === '' ? '?' : '?' . $uri->getQuery(),
+            'content-digest' => $request->getHeaderLine('Content-Digest'),
+            'nonce' => $request->getHeaderLine('Nonce'),
+            'idempotency-key' => $request->getHeaderLine('Idempotency-Key'),
+            'x-anis-date' => $request->getHeaderLine('X-Anis-Date'),
+        ];
+        $base = '';
+        foreach ($components as $component) {
+            $base .= '"' . $component . '": ' . $values[$component] . "\n";
+        }
+        $parameters = substr($signatureInput, strlen('sig1='));
+        $base .= '"@signature-params": ' . $parameters;
+
+        self::assertSame('sha-256=:' . base64_encode(hash('sha256', (string) $request->getBody(), true)) . ':', $request->getHeaderLine('Content-Digest'));
+        self::assertStringContainsString(';nonce="' . $request->getHeaderLine('Nonce') . '"', $parameters);
+        self::assertMatchesRegularExpression('/\\A\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z\\z/', $request->getHeaderLine('X-Anis-Date'));
+        self::assertSame(strtolower(self::OPERATION), $request->getHeaderLine('Idempotency-Key'));
+
+        $jwk = $wire->requestPublicJwk();
+        self::assertInstanceOf(PartnerJwk::class, $jwk);
+        $point = "\x04" . Base64Url::decode((string) $jwk->x) . Base64Url::decode((string) $jwk->y);
+        $spki = hex2bin('3059301306072a8648ce3d020106082a8648ce3d030107034200') . $point;
+        self::assertNotFalse($spki);
+        $publicKey = openssl_pkey_get_public("-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($spki), 64, "\n") . "-----END PUBLIC KEY-----\n");
+        self::assertNotFalse($publicKey);
+        $signatureMatch = [];
+        if (preg_match('/\\Asig1=:([^:]+):\\z/', $request->getHeaderLine('Signature'), $signatureMatch) !== 1) {
+            throw new \UnexpectedValueException('The request signature is malformed.');
+        }
+        $signature = base64_decode($signatureMatch[1], true);
+        self::assertIsString($signature);
+        self::assertSame(1, openssl_verify($base, EcdsaSignatureFormat::p1363ToDer($signature), $publicKey, OPENSSL_ALGO_SHA256));
+    }
+
+    #[Test]
     public function it_refuses_to_return_a_body_changed_after_signing(): void
     {
         $wire = new SignedFakeWire();
@@ -146,19 +230,63 @@ final class PartnerPipelineTest extends TestCase
     }
 
     #[Test]
+    public function it_hides_a_tampered_credential_response_from_exception_traces(): void
+    {
+        $previous = ini_get('zend.exception_ignore_args');
+        ini_set('zend.exception_ignore_args', '0');
+        $wire = new SignedFakeWire();
+        $wire->body = '{"soldCardId":"' . self::CARD . '","voucher":"trace-tampered-voucher"}';
+        $wire->tamperAfterSigning = true;
+
+        try {
+            try {
+                self::client($wire)->ownedCards()->reveal(self::WALLET, self::CARD);
+                self::fail('A response whose credential body changed after signing must be rejected.');
+            } catch (UnverifiableResponseException $exception) {
+                self::assertStringNotContainsString('trace-tampered-voucher', print_r($exception->getTrace(), true));
+            }
+        } finally {
+            if ($previous !== false) {
+                ini_set('zend.exception_ignore_args', $previous);
+            }
+        }
+    }
+
+    #[Test]
     public function it_follows_every_page_and_signs_the_encoded_cursor_it_sends(): void
     {
         $wire = new SignedFakeWire();
         $wire->responseQueue = [
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":"page / 2"}', 'headers' => ['X-Request-Id' => 'req-1']],
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'req-2']],
+            ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26"}],"nextCursor":"page / 2"}', 'headers' => ['X-Request-Id' => 'req-1']],
+            ['status' => 200, 'body' => '{"items":[{"id":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'req-2']],
         ];
-        $client = self::client($wire);
-        self::assertSame([], iterator_to_array($client->wallets()->list()));
+        $factory = new HttpFactory();
+        $capturingSigner = new class ($wire->requestSigner()) implements RequestSigner {
+            /** @var list<string> */
+            public array $bases = [];
+
+            public function __construct(private readonly RequestSigner $inner) {}
+
+            public function keyId(): string
+            {
+                return $this->inner->keyId();
+            }
+
+            public function sign(#[\SensitiveParameter] string $data): string
+            {
+                $this->bases[] = $data;
+
+                return $this->inner->sign($data);
+            }
+        };
+        $client = AnisPartnersClient::create(new ClientOptions('https://partners.example'), $capturingSigner, $wire, $factory, $factory);
+        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\Wallet ? $item->id : throw new \UnexpectedValueException(), iterator_to_array($client->wallets()->list())));
 
         self::assertCount(3, $wire->requests);
-        self::assertStringContainsString('cursor=page%20%2F%202', (string) $wire->requests[2]->getUri());
-        self::assertNotSame('', $wire->requests[2]->getHeaderLine('Signature-Input'));
+        self::assertSame('', $wire->requests[1]->getUri()->getQuery());
+        self::assertSame('cursor=page%20%2F%202', $wire->requests[2]->getUri()->getQuery());
+        self::assertStringContainsString('"@query": ?', $capturingSigner->bases[0]);
+        self::assertStringContainsString('"@query": ?cursor=page%20%2F%202', $capturingSigner->bases[1]);
     }
 
     #[Test]
@@ -166,12 +294,51 @@ final class PartnerPipelineTest extends TestCase
     {
         $wire = new SignedFakeWire();
         $wire->responseQueue = [
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":"owned-2"}', 'headers' => ['X-Request-Id' => 'owned-1']],
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'owned-2']],
+            ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26"}],"nextCursor":"owned-2"}', 'headers' => ['X-Request-Id' => 'owned-1']],
+            ['status' => 200, 'body' => '{"items":[{"id":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'owned-2']],
         ];
-        self::assertSame([], iterator_to_array(self::client($wire)->ownedCards()->list(self::WALLET)));
+        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof MaskedCard ? $item->id : throw new \UnexpectedValueException(), iterator_to_array(self::client($wire)->ownedCards()->list(self::WALLET))));
 
         self::assertStringContainsString('/v1/wallets/' . self::WALLET . '/cards?cursor=owned-2', (string) $wire->requests[2]->getUri());
+    }
+
+    #[Test]
+    public function it_stops_when_a_cursor_repeats_after_other_cursors(): void
+    {
+        $wire = new SignedFakeWire();
+        $wire->responseQueue = [
+            ['status' => 200, 'body' => '{"items":[],"nextCursor":"A"}', 'headers' => ['X-Request-Id' => 'cycle-1']],
+            ['status' => 200, 'body' => '{"items":[],"nextCursor":"B"}', 'headers' => ['X-Request-Id' => 'cycle-2']],
+            ['status' => 200, 'body' => '{"items":[],"nextCursor":"A"}', 'headers' => ['X-Request-Id' => 'cycle-3']],
+        ];
+
+        try {
+            iterator_to_array(self::client($wire)->wallets()->list());
+            self::fail('A→B→A cursor cycle must stop pagination.');
+        } catch (\Anis\Partners\Errors\MalformedResponseException $exception) {
+            self::assertSame('Anis repeated a paging cursor.', $exception->getMessage());
+            self::assertCount(4, $wire->requests); // One key-document request and three pages.
+        }
+    }
+
+    #[Test]
+    public function it_maps_malformed_reveal_and_enrollment_answers_to_the_common_exception(): void
+    {
+        $factory = new HttpFactory();
+        $revealWire = new SignedFakeWire();
+        $revealWire->body = '{"soldCardId":17,"voucher":"private-answer"}';
+        try {
+            self::client($revealWire)->ownedCards()->reveal(self::WALLET, self::CARD);
+            self::fail('A malformed revealed credential must be refused as a malformed response.');
+        } catch (\Anis\Partners\Errors\MalformedResponseException $exception) {
+            self::assertStringNotContainsString('private-answer', $exception->getMessage());
+        }
+
+        $enrollmentWire = new SignedFakeWire();
+        $enrollmentWire->body = '{"state":17}';
+        $enrollment = \Anis\Partners\Enrollment\EnrollmentClient::create('https://partners.example', self::CARD, 'enrollment-token', $enrollmentWire, $factory, $factory);
+        $this->expectException(\Anis\Partners\Errors\MalformedResponseException::class);
+        $enrollment->getStatus();
     }
 
     #[Test]
@@ -179,10 +346,10 @@ final class PartnerPipelineTest extends TestCase
     {
         $wire = new SignedFakeWire();
         $wire->responseQueue = [
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":"cards-2"}', 'headers' => ['X-Request-Id' => 'cards-1']],
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'cards-2']],
+            ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26","subcategoryId":"4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046"}],"nextCursor":"cards-2"}', 'headers' => ['X-Request-Id' => 'cards-1']],
+            ['status' => 200, 'body' => '{"items":[{"id":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34","subcategoryId":"4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'cards-2']],
         ];
-        self::assertSame([], iterator_to_array(self::client($wire)->catalogue()->listCards(self::WALLET, self::CARD)));
+        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueCard ? $item->id : throw new \UnexpectedValueException(), iterator_to_array(self::client($wire)->catalogue()->listCards(self::WALLET, self::CARD))));
 
         self::assertStringContainsString('/catalog/subcategories/' . self::CARD . '/cards?cursor=cards-2', (string) $wire->requests[2]->getUri());
     }
@@ -192,14 +359,14 @@ final class PartnerPipelineTest extends TestCase
     {
         $wire = new SignedFakeWire();
         $wire->responseQueue = [
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":"category-2"}', 'headers' => ['X-Request-Id' => 'cat-1']],
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'cat-2']],
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":"sub-2"}', 'headers' => ['X-Request-Id' => 'sub-1']],
-            ['status' => 200, 'body' => '{"items":[],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'sub-2']],
+            ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26"}],"nextCursor":"category-2"}', 'headers' => ['X-Request-Id' => 'cat-1']],
+            ['status' => 200, 'body' => '{"items":[{"id":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'cat-2']],
+            ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26","categoryId":"b672ca4e-c751-4507-8069-326496525a98"}],"nextCursor":"sub-2"}', 'headers' => ['X-Request-Id' => 'sub-1']],
+            ['status' => 200, 'body' => '{"items":[{"id":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34","categoryId":"b672ca4e-c751-4507-8069-326496525a98"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'sub-2']],
         ];
         $catalogue = self::client($wire)->catalogue();
-        self::assertSame([], iterator_to_array($catalogue->listCategories(self::WALLET)));
-        self::assertSame([], iterator_to_array($catalogue->listSubcategories(self::WALLET, self::CARD)));
+        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueCategory ? $item->id : throw new \UnexpectedValueException(), iterator_to_array($catalogue->listCategories(self::WALLET))));
+        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueSubcategory ? $item->id : throw new \UnexpectedValueException(), iterator_to_array($catalogue->listSubcategories(self::WALLET, self::CARD))));
 
         self::assertStringContainsString('/catalog/categories?cursor=category-2', (string) $wire->requests[2]->getUri());
         self::assertStringContainsString('/catalog/categories/' . self::CARD . '/subcategories?cursor=sub-2', (string) $wire->requests[4]->getUri());

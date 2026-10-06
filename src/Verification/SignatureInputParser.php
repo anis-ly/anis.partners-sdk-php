@@ -86,13 +86,15 @@ final class SignatureInputParser
                 if ($text === '' || preg_match('/\A[0-9]+\z/D', $text) !== 1) {
                     return null;
                 }
-                $number = filter_var($text, FILTER_VALIDATE_INT);
-                if ($number === false) {
+                $decimal = ltrim($text, '0');
+                $decimal = $decimal === '' ? '0' : $decimal;
+                $maximum = (string) PHP_INT_MAX;
+                if (strlen($decimal) > strlen($maximum) || (strlen($decimal) === strlen($maximum) && strcmp($decimal, $maximum) > 0)) {
                     return null;
                 }
                 $index = $end;
                 if ($name === 'created') {
-                    $created = $number;
+                    $created = (int) $decimal;
                 }
             }
         }

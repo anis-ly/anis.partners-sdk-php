@@ -1,9 +1,8 @@
 # Getting started
 
-## 1. Enroll a key
+## Enroll a key
 
-Ask Anis for an invitation id and one-use enrollment token. Generate a P-256 key pair and protect its private half
-before submitting the public half. The invitation accepts one key, so save the private key first.
+Ask Anis for an invitation id and one-use enrollment token. Generate a P-256 key pair and create its private file with owner-only permissions before writing any key bytes.
 
 ```php
 <?php
@@ -11,40 +10,51 @@ before submitting the public half. The invitation accepts one key, so save the p
 use Anis\Partners\Enrollment\EnrollmentClient;
 use Anis\Partners\Models\EnrollmentKeyRequest;
 use Anis\Partners\Signing\PemP256Signer;
-use Anis\Partners\Verification\PartnerJwk;
 
 $key = openssl_pkey_new(['private_key_type' => OPENSSL_KEYTYPE_EC, 'curve_name' => 'prime256v1']);
 if ($key === false || !openssl_pkey_export($key, $pem)) {
     throw new RuntimeException('Could not create the P-256 key.');
 }
-if (file_put_contents('/secure/partner-key.pem', $pem, LOCK_EX) === false) {
-    throw new RuntimeException('Could not save the private key.');
+if (!is_string($pem)) {
+    throw new RuntimeException('OpenSSL did not return a private key PEM.');
 }
-chmod('/secure/partner-key.pem', 0600);
-$signer = PemP256Signer::fromPem($pem);
+$keyPath = '/secure/partner-key.pem';
+$oldMask = umask(0077);
+try {
+    $file = fopen($keyPath, 'x');
+} finally {
+    umask($oldMask);
+}
+if ($file === false) {
+    throw new RuntimeException('The key file already exists or could not be created; choose a new path.');
+}
+$written = fwrite($file, $pem);
+fclose($file);
+if ($written !== strlen($pem) || !chmod($keyPath, 0600)) {
+    // Delete only the new file opened exclusively by this code.
+    @unlink($keyPath);
+    throw new RuntimeException('Could not safely save the private key.');
+}
+
+$signer = PemP256Signer::fromPemFile($keyPath);
 $jwk = $signer->publicJwk();
 $enrollment = EnrollmentClient::create('https://partners.example', $invitationId, $enrollmentToken);
-$submitted = $enrollment->submitKey(new EnrollmentKeyRequest(
-    $jwk,
-    new DateTimeImmutable('now', new DateTimeZone('UTC')),
-    new DateTimeImmutable('+1 year', new DateTimeZone('UTC')),
-));
+$now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$submitted = $enrollment->submitKey(new EnrollmentKeyRequest($jwk, $now, $now->modify('+365 days')));
 $status = $enrollment->prove($submitted, $signer);
-
+if ($status->proofState !== 'accepted') {
+    throw new RuntimeException('Anis did not accept the key proof.');
+}
 printf("Key id: %s\nSafety code: %s\n", $submitted->keyId, $submitted->safetyCode);
 ```
 
-The safety code is a short check derived from the key fingerprint. Anis staff call your registered technical contact;
-read the code from your own software during that call. Do not send a fingerprint by email or chat. `submitKey()` also
-compares the returned thumbprint with the public key you submitted before it returns a result.
+The safety code comes from the submitted public key's fingerprint. Compare it with Anis staff over your registered support channel; do not send the fingerprint by email or chat. `submitKey()` checks Anis's returned thumbprint against the submitted key before returning.
 
-After `prove()` reports `accepted`, wait for Anis staff to verify the safety code and confirm the key. Poll
-`$enrollment->getStatus()` until `state` is `active`. A proved key remains unavailable until that confirmation.
+After the proof is accepted, wait for staff to confirm the key. Poll `$enrollment->getStatus()` until the enrollment state is active. A proved key cannot sign partner requests before that confirmation.
 
-## 2. Configure the client
+## Configure the client
 
-Install `anis-ly/partners` and a PSR-18 client such as Guzzle, or Symfony HTTP Client with Nyholm PSR-7. The SDK finds
-the installed HTTP client and PSR-17 message factories when creating the client.
+Install `anis-ly/partners` and one PSR-18 client plus PSR-17 message factories. Guzzle or Symfony HTTP Client with Nyholm PSR-7 are common choices; the SDK discovers installed implementations.
 
 ```php
 use Anis\Partners\AnisPartnersClient;
@@ -57,40 +67,30 @@ $options = ClientOptions::fromArray([
     'acceptLanguage' => 'Arabic',
     'signingKeyCacheSeconds' => 600,
 ]);
-$signer = PemP256Signer::fromPemFile('/secure/partner-key.pem')->forKey($submitted->keyId);
+$signer = PemP256Signer::fromPemFile('/secure/partner-key.pem')->forKey($keyId);
 $client = AnisPartnersClient::create($options, $signer);
 ```
 
-The authority is the exact HTTPS authority Anis issued. There is no environment selector: each deployment has its own
-authority, keys, and data. Signature lifetime is 1–60 seconds. HTTP timeouts are configured on your PSR-18 client.
-The key is passed separately because each partner chooses its own key custody.
+Use the HTTPS authority Anis issued. Plain HTTP is accepted only for loopback testing. Signature lifetime is 1–60 seconds. Set connection and request timeouts on your PSR-18 client; redirect following must be disabled so signed requests are never replayed to another location.
 
-## 3. Make the first call
+## Make a call
 
 ```php
 $profile = $client->profile()->get();
-$scopes = $profile->application?->scopes ?? [];
+$scopes = $profile->application->scopes ?? [];
 ```
 
-Scopes reflect current access. Read them from the current profile rather than relying on a cached copy. See
-[Routes and permissions](routes-and-permissions.md) for the permission each route requires.
+Scopes reflect current access. Read them from the current profile rather than relying on a cached copy. See [Routes and permissions](routes-and-permissions.md) for each route's permission.
+
+For every purchase, generate a fresh random UUID version 4 operation id and store it with the exact request before calling `create()`. Reuse that same id only with `resume()` during recovery.
 
 ## When a signature will not verify
 
-Use the signed self-check to see the request facts Anis reconstructed:
+Use the signed self-check to inspect the request facts Anis reconstructed:
 
 ```php
 $diagnostic = $client->diagnostics()->checkSignature();
 var_dump($diagnostic->method, $diagnostic->authority, $diagnostic->path, $diagnostic->canonicalQuery, $diagnostic->coveredComponents);
 ```
 
-It requires `diagnostics:use`. If it succeeds, compare its method, authority, path, query, and covered components
-with the request that failed; also check whether a proxy changed the body after it was digested. `invalid_credentials`
-can mean a wrong key id or key file, a key that is not active, a revoked or expired key, a host clock outside the
-allowed window, or a different authority. `insufficient_scope` means a missing permission or a calling network that
-Anis has not approved. Contact support@anis.ly with the request id if the self-check does not explain the failure.
-
-## Laravel
-
-A Laravel package is planned separately. No date has been set. The SDK can be used directly from a Laravel service
-provider today; see [Caching](caching.md) for a shared PSR-16 cache.
+It requires `diagnostics:use`. Compare the method, authority, path, query, and covered components with the failed request; also check whether a proxy changed the body after it was digested. `invalid_credentials` can mean a wrong key id or key file, a key that is not active, a revoked or expired key, a host clock outside the allowed window, or a different authority. Contact support@anis.ly with the request id if the self-check does not explain the failure.

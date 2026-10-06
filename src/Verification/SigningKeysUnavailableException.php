@@ -7,7 +7,7 @@ namespace Anis\Partners\Verification;
 use Anis\Partners\AnisPartnersException;
 
 /** Reports that the published response-signing keys could not be fetched or read. */
-final class SigningKeysUnavailableException extends \RuntimeException implements AnisPartnersException
+final class SigningKeysUnavailableException extends \Anis\Partners\Errors\AnisPartnersRuntimeException implements AnisPartnersException
 {
     /** Keeps the transport or document parsing cause available without exposing document contents. */
     public function __construct(?\Throwable $previous = null)

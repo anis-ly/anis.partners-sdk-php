@@ -3,10 +3,19 @@
     "description": "The PHP SDK for the Anis Partner API — signed requests, verified responses, typed operations.",
     "type": "library",
     "license": "MIT",
-    "keywords": ["anis", "libya", "partner-api", "http-signatures", "rfc9421", "sdk"],
+    "keywords": [
+        "anis",
+        "libya",
+        "partner-api",
+        "http-signatures",
+        "rfc9421",
+        "sdk"
+    ],
     "homepage": "https://developers.anis.ly",
     "support": {
         "email": "support@anis.ly",
+        "issues": "https://github.com/anis-ly/anis.partners-sdk-php/issues",
+        "source": "https://github.com/anis-ly/anis.partners-sdk-php",
         "docs": "https://developers.anis.ly"
     },
     "authors": [
@@ -17,8 +26,6 @@
     ],
     "require": {
         "php": "^8.2",
-        "ext-hash": "*",
-        "ext-json": "*",
         "ext-openssl": "*",
         "open-telemetry/api": "^1.1",
         "php-http/discovery": "^1.19",
@@ -27,7 +34,9 @@
         "psr/http-factory": "^1.0",
         "psr/http-message": "^1.1 || ^2.0",
         "psr/log": "^2.0 || ^3.0",
-        "psr/simple-cache": "^2.0 || ^3.0"
+        "psr/simple-cache": "^2.0 || ^3.0",
+        "psr/http-client-implementation": "^1.0",
+        "psr/http-factory-implementation": "^1.0"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.64",
@@ -52,15 +61,25 @@
             "php": "8.2.0"
         },
         "allow-plugins": {
-            "php-http/discovery": false
+            "php-http/discovery": true
         }
     },
     "scripts": {
         "test": "phpunit",
-        "analyse": "phpstan analyse --memory-limit=1G",
-        "cs": "php-cs-fixer fix --dry-run --diff",
-        "cs-fix": "php-cs-fixer fix",
-        "check": ["@cs", "@analyse", "@test"]
+        "analyse": "phpstan analyse --memory-limit=1G --debug --no-progress",
+        "cs": "php-cs-fixer fix --dry-run --diff --sequential",
+        "cs-fix": "php-cs-fixer fix --sequential",
+        "check": [
+            "@cs",
+            "@analyse",
+            "@test"
+        ]
     },
-    "minimum-stability": "stable"
+    "minimum-stability": "stable",
+    "suggest": {
+        "guzzlehttp/guzzle": "PSR-18 HTTP client; configure a finite timeout and disable redirects.",
+        "symfony/http-client": "PSR-18 HTTP client; configure a finite timeout and disable redirects.",
+        "nyholm/psr7": "PSR-17 request, response, and stream factories.",
+        "php-http/discovery": "Discovers installed PSR-18 clients and PSR-17 factories."
+    }
 }

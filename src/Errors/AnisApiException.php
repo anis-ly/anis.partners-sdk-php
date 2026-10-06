@@ -5,25 +5,26 @@ declare(strict_types=1);
 namespace Anis\Partners\Errors;
 
 use Anis\Partners\AnisPartnersException;
+use Anis\Partners\Internal\RetryAfter;
 use Anis\Partners\Models\Problem;
 
 /** Represents a verified refusal; branch on its machine code, not localized message text. */
 class AnisApiException extends \RuntimeException implements AnisPartnersException
 {
-    public ErrorCode $errorCode;
-    public ?string $rawCode;
-    public int $status;
-    public ?string $requestId;
-    public ?string $typeUri;
-    public ?int $retryAfter;
-    public bool $isReplayed;
-    public bool $isRetryable;
-    public OrderRefusalOutcome $orderOutcome;
-    public Problem $problem;
+    public readonly ErrorCode $errorCode;
+    public readonly ?string $rawCode;
+    public readonly int $status;
+    public readonly ?string $requestId;
+    public readonly ?string $typeUri;
+    public readonly ?int $retryAfter;
+    public readonly bool $isReplayed;
+    public readonly bool $isRetryable;
+    public readonly OrderRefusalOutcome $orderOutcome;
+    public readonly Problem $problem;
 
     /**
      * Builds a refusal from its verified body and semantic response headers.
-     * Keeps these public partner values stable after construction.
+     *
      */
     public function __construct(Problem $problem, int $status, ?int $retryAfter = null, bool $isReplayed = false)
     {
@@ -54,7 +55,8 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
     public static function fromResponse(int $status, array $headers, string $body): self
     {
         try {
-            $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+            $decoded = json_decode($body, false, 512, JSON_THROW_ON_ERROR);
+            $data = $decoded instanceof \stdClass ? get_object_vars($decoded) : null;
         } catch (\JsonException) {
             $data = null;
         }
@@ -87,11 +89,8 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
                 continue;
             }
             foreach (is_array($values) ? $values : [$values] as $value) {
-                if (is_string($value) && preg_match('/\A[0-9]+\z/D', trim($value)) === 1) {
-                    $parsed = filter_var(trim($value), FILTER_VALIDATE_INT);
-                    if ($parsed !== false) {
-                        $retryAfter = $parsed;
-                    }
+                if (is_string($value)) {
+                    $retryAfter = RetryAfter::parse(trim($value));
                     break;
                 }
             }
@@ -128,7 +127,7 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
     /** Represents a verified success that supplied no JSON body, whose result cannot be safely inferred. */
     public static function emptyBody(int $status): self
     {
-        return new self(new Problem('about:blank', 'Empty body', $status, ErrorCode::InternalError->value), $status);
+        return new EmptyBodyException($status);
     }
 
     private static function buildMessage(Problem $problem, int $status, bool $isReplayed): string
@@ -136,7 +135,7 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
         return 'Anis returned ' . $status . ' ' . ($problem->code ?? '')
             . ($isReplayed ? ' (the recorded answer of an earlier attempt with this operation id)' : '')
             . ($problem->requestId === null ? '' : ' (request ' . $problem->requestId . ')')
-            . ($problem->title === 'Empty body' ? ' Empty body.' : '')
+            . ($status >= 200 && $status < 300 && $problem->code === ErrorCode::InternalError->value ? ' Empty body.' : '')
             . '. Branch on the code, not on this message.';
     }
 }

@@ -77,6 +77,8 @@ final class ModelSerializationTest extends TestCase
             $price->multiply(2),
         );
         $jwk = new PartnerJwk('EC', 'P-256', 'x-coordinate', 'y-coordinate', d: 'private-member');
+        self::assertTrue($jwk->hasPrivateMember);
+        self::assertStringNotContainsString('private-member', var_export($jwk, true));
         $enrollmentKey = new EnrollmentKeyRequest(
             $jwk,
             new \DateTimeImmutable('2026-10-05T12:34:56+02:00'),

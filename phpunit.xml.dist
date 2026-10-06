@@ -5,6 +5,8 @@
          colors="true"
          failOnRisky="true"
          failOnWarning="true"
+         failOnDeprecation="true"
+         executionOrder="random"
          failOnEmptyTestSuite="true"
          beStrictAboutOutputDuringTests="true"
          cacheDirectory=".phpunit.cache">

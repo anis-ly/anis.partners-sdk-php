@@ -8,7 +8,7 @@ namespace Anis\Partners\Models;
 final readonly class OwnerAccount implements \JsonSerializable
 {
     use WireJsonSerialization;
-    /** Keeps these public partner values stable after construction. */
+
     public function __construct(public string $id, public ?string $displayName = null) {}
 
     /**

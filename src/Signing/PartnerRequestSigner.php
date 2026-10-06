@@ -9,26 +9,27 @@ final class PartnerRequestSigner
 {
     /**
      * Configures the credential that Anis uses to verify outgoing requests.
-     * Keeps these public partner values stable after construction.
+     *
      */
     public function __construct(private readonly RequestSigner $signer) {}
 
     /** Refuses incomplete or malformed signatures before any request can be sent. */
-    public function sign(SignatureProfile $profile, SignatureInputs $inputs, int $created, int $expires): SignedRequestHeaders
+    public function sign(SignatureProfile $profile, #[\SensitiveParameter] SignatureInputs $inputs, int $created, int $expires): SignedRequestHeaders
     {
         if (($profile === SignatureProfile::SafeRead) !== ($inputs->nonce === null)) {
-            throw new \InvalidArgumentException($profile === SignatureProfile::SafeRead
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException($profile === SignatureProfile::SafeRead
                 ? 'The SafeRead profile carries no nonce.'
                 : 'The mutation profile requires a nonce.');
         }
         if ($expires - $created > PartnerRequestSignatureBase::MAX_SIGNATURE_LIFETIME_SECONDS) {
-            throw new \InvalidArgumentException('A request signature may live at most 300 seconds.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('A request signature may live at most 300 seconds.');
         }
 
-        $components = $profile->components();
-        $parameters = PartnerRequestSignatureBase::parameters($components, $created, $expires, $this->signer->keyId(), $inputs->nonce);
-        $base = PartnerRequestSignatureBase::build($components, $inputs, $parameters);
         try {
+            $components = $profile->components();
+            $keyId = $this->signer->keyId();
+            $parameters = PartnerRequestSignatureBase::parameters($components, $created, $expires, $keyId, $inputs->nonce);
+            $base = PartnerRequestSignatureBase::build($components, $inputs, $parameters);
             $bytes = $this->signer->sign($base);
         } catch (\Throwable $error) {
             throw new RequestSigningException($error);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Anis\Partners\Operations;
 
+use Anis\Partners\Errors\MalformedResponseException;
 use Anis\Partners\Models\Page;
 use Anis\Partners\Signing\SignatureProfile;
 
@@ -19,7 +20,11 @@ abstract class AbstractOperations
     {
         $response = $transport->request('GET', $template, $path, SignatureProfile::SafeRead);
 
-        return $hydrate($response->json);
+        try {
+            return $hydrate($response->json);
+        } catch (\Throwable) {
+            throw new MalformedResponseException('The verified Anis response does not match the requested model.');
+        }
     }
 
     /**
@@ -30,16 +35,36 @@ abstract class AbstractOperations
     protected function fetchPage(PartnerTransport $transport, string $template, string $path, callable $hydrate): Page
     {
         $response = $transport->request('GET', $template, $path, SignatureProfile::SafeRead);
-        $page = Page::fromArray($response->json);
+        try {
+            $page = Page::fromArray($response->json);
+        } catch (\Throwable) {
+            throw new MalformedResponseException('The verified Anis response does not match the requested page.');
+        }
         $items = [];
         foreach ($page->items as $item) {
             if (!is_array($item)) {
-                throw new \UnexpectedValueException('A page item must be an object.');
+                throw new MalformedResponseException('The verified Anis page contains an invalid item.');
             }
-            $items[] = $hydrate($item);
+            try {
+                $items[] = $hydrate($item);
+            } catch (\Throwable) {
+                throw new MalformedResponseException('The verified Anis page item does not match the requested model.');
+            }
         }
 
         return new Page($items, $page->nextCursor);
+    }
+
+    /** Stops a repeated cursor from issuing signed reads forever. */
+    /** @param array<string, true> $seenCursors */
+    protected function ensureCursorProgress(?string $nextCursor, array &$seenCursors): void
+    {
+        if ($nextCursor !== null && $nextCursor !== '') {
+            if (isset($seenCursors[$nextCursor])) {
+                throw new \Anis\Partners\Errors\MalformedResponseException('Anis repeated a paging cursor.');
+            }
+            $seenCursors[$nextCursor] = true;
+        }
     }
 
     /** Encodes an opaque paging cursor once so the transmitted query is signed verbatim. */

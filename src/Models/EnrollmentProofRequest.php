@@ -7,7 +7,6 @@ namespace Anis\Partners\Models;
 /** Answers one enrollment challenge with proof of possession of the private key. */
 final readonly class EnrollmentProofRequest implements \JsonSerializable
 {
-    /** Keeps these public partner values stable after construction. */
     public function __construct(
         public string $keyId,
         public int $challengeGeneration,
@@ -22,7 +21,7 @@ final readonly class EnrollmentProofRequest implements \JsonSerializable
     {
         $signature = ModelData::nullableString($data, 'signature');
         if ($signature === null || !array_key_exists('challengeGeneration', $data)) {
-            throw new \UnexpectedValueException('An enrollment proof requires its generation and signature.');
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('An enrollment proof requires its generation and signature.');
         }
 
         return new self(

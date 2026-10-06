@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Anis\Partners\Verification;
 
 use Anis\Partners\Internal\SystemClock;
-use OpenTelemetry\API\Globals;
+use Anis\Partners\Observability\AnisPartnersTelemetry;
+use Anis\Partners\Observability\Log;
 use Psr\Clock\ClockInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Psr\SimpleCache\CacheInterface;
 
 /** Fetches and caches the public key document Anis publishes for response verification. */
@@ -22,7 +24,7 @@ final class HttpSigningKeySource implements SigningKeySource
 
     /**
      * Configures HTTP retrieval and optional shared caching so separate PHP workers reuse fresh keys.
-     * Keeps these public partner values stable after construction.
+     *
      */
     public function __construct(
         private readonly ClientInterface $client,
@@ -32,10 +34,12 @@ final class HttpSigningKeySource implements SigningKeySource
         private readonly ?CacheInterface $cache = null,
         ?ClockInterface $clock = null,
         private readonly ?LoggerInterface $logger = null,
+        private readonly string $clientName = 'default',
     ) {
         $this->clock = $clock ?? new SystemClock();
         // PHP-FPM starts a process per request, so a shared cache avoids fetching keys on every page.
-        $this->cacheKey = 'anis-partners.signing-keys.' . hash('sha256', strtolower($authority));
+        $normalizedAuthority = self::normalizeAuthority($authority);
+        $this->cacheKey = 'anis_partners_keys_' . substr(hash('sha256', $normalizedAuthority), 0, 32);
     }
 
     /** Returns fresh cached keys or fetches the document when this cache entry expires. */
@@ -48,13 +52,17 @@ final class HttpSigningKeySource implements SigningKeySource
         $expired = $this->fetchedAt !== null;
 
         if ($this->cache !== null) {
-            $cached = $this->cache->get($this->cacheKey);
+            try {
+                $cached = $this->cache->get($this->cacheKey);
+            } catch (\Throwable) {
+                $cached = null;
+            }
             if (is_string($cached)) {
                 try {
                     $entry = json_decode($cached, true, 512, JSON_THROW_ON_ERROR);
                     if (is_array($entry) && is_string($entry['document'] ?? null) && is_int($entry['fetchedAt'] ?? null)) {
                         $keySet = SigningKeySet::fromJson($entry['document']);
-                        if ($now - $entry['fetchedAt'] < $this->cacheSeconds) {
+                        if ($entry['fetchedAt'] <= $now + 60 && $now < $entry['fetchedAt'] + $this->cacheSeconds) {
                             $this->memory = $keySet;
                             $this->fetchedAt = $entry['fetchedAt'];
 
@@ -62,7 +70,7 @@ final class HttpSigningKeySource implements SigningKeySource
                         }
                         $expired = true;
                     }
-                } catch (\JsonException|\UnexpectedValueException) {
+                } catch (\JsonException|\Anis\Partners\Errors\AnisPartnersUnexpectedValueException) {
                     $expired = true;
                 }
             }
@@ -97,19 +105,43 @@ final class HttpSigningKeySource implements SigningKeySource
             $this->fetchedAt = $now;
             if ($this->cache !== null) {
                 $entry = json_encode(['document' => $document, 'fetchedAt' => $now], JSON_THROW_ON_ERROR);
-                $this->cache->set($this->cacheKey, $entry, $this->cacheSeconds);
+                try {
+                    $this->cache->set($this->cacheKey, $entry, $this->cacheSeconds);
+                } catch (\Throwable) {
+                    try {
+                        ($this->logger ?? new NullLogger())->warning('Could not cache the Anis signing-key document: {reason}', ['reason' => 'cache_write_failed']);
+                    } catch (\Throwable) {
+                    }
+                }
             }
         } catch (SigningKeysUnavailableException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {
             throw new SigningKeysUnavailableException($exception);
         }
-        try {
-            Globals::meterProvider()->getMeter('anis-ly/partners')->createCounter('anis.partners.signing_keys.fetches')->add(1, ['anis.fetch.reason' => $reason]);
-        } catch (\Throwable) {
-        }
-        \Anis\Partners\Observability\Log::write($this->logger ?? new \Psr\Log\NullLogger(), 'info', 'Fetched the Anis signing-key document', 1005, ['reason' => $reason, 'key_count' => count($keys->keys)]);
+        AnisPartnersTelemetry::signingKeysFetched($reason, count($keys->keys), $this->clientName);
+        Log::write($this->logger ?? new NullLogger(), 'info', 'Fetched the Anis signing-key document: {reason}, {key_count} keys', 1005, ['reason' => $reason, 'key_count' => count($keys->keys)]);
 
         return $keys;
+    }
+
+    private static function normalizeAuthority(string $authority): string
+    {
+        $parts = parse_url($authority);
+        if ($parts === false || !isset($parts['scheme'], $parts['host'])) {
+            return rtrim(strtolower($authority), '/');
+        }
+        $scheme = strtolower($parts['scheme']);
+        $host = strtolower($parts['host']);
+        if (str_contains($host, ':')) {
+            $packed = inet_pton(trim($host, '[]'));
+            if ($packed !== false) {
+                $host = '[' . strtolower((string) inet_ntop($packed)) . ']';
+            }
+        }
+        $port = $parts['port'] ?? null;
+        $defaultPort = ($scheme === 'https' && $port === 443) || ($scheme === 'http' && $port === 80);
+
+        return $scheme . '://' . $host . ($port === null || $defaultPort ? '' : ':' . $port);
     }
 }

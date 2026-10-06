@@ -147,4 +147,14 @@ final class ErrorMappingTest extends TestCase
         self::assertSame(502, $error->status);
         self::assertSame(OrderRefusalOutcome::Unknown, $error->orderOutcome);
     }
+
+    #[Test]
+    public function it_treats_a_json_array_as_an_unreadable_problem_object(): void
+    {
+        $error = AnisApiException::fromResponse(502, [], '[]');
+
+        self::assertSame(ErrorCode::InternalError, $error->errorCode);
+        self::assertSame('internal_error', $error->rawCode);
+        self::assertSame(502, $error->getCode());
+    }
 }

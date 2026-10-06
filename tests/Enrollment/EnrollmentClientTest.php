@@ -14,6 +14,7 @@ use Anis\Partners\Internal\Base64Url;
 use Anis\Partners\Models\EnrollmentKeyRequest;
 use Anis\Partners\Models\EnrollmentKeyResult;
 use Anis\Partners\Models\EnrollmentStatus;
+use Anis\Partners\Signing\EcdsaSignatureFormat;
 use Anis\Partners\Signing\P256Signer;
 use Anis\Partners\Signing\PemP256Signer;
 use Anis\Partners\Tests\Support\SignedFakeWire;
@@ -24,6 +25,31 @@ use PHPUnit\Framework\TestCase;
 
 final class EnrollmentClientTest extends TestCase
 {
+    #[Test]
+    public function it_rejects_non_visible_enrollment_tokens_without_retaining_them(): void
+    {
+        $factory = new HttpFactory();
+
+        try {
+            EnrollmentClient::create(
+                'https://partners.example',
+                '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34',
+                "TOKEN\r\n",
+                new \Anis\Partners\Tests\Support\FakeHttpClient(),
+                $factory,
+                $factory,
+            );
+            self::fail('Control characters cannot be handed to the HTTP header implementation.');
+        } catch (\Throwable $exception) {
+            self::assertStringContainsString('visible ASCII', $exception->getMessage());
+            $chain = '';
+            for ($current = $exception; $current !== null; $current = $current->getPrevious()) {
+                $chain .= $current->getMessage();
+            }
+            self::assertStringNotContainsString('TOKEN', $chain);
+        }
+    }
+
     #[Test]
     public function it_redacts_an_enrollment_token_from_native_client_inspection(): void
     {
@@ -40,9 +66,11 @@ final class EnrollmentClientTest extends TestCase
         ob_start();
         var_dump($client);
         $dump = (string) ob_get_clean();
+        $export = var_export($client, true);
 
         self::assertStringContainsString('<redacted>', $dump);
         self::assertStringNotContainsString('enrollment-token-private', $dump);
+        self::assertStringNotContainsString('enrollment-token-private', $export);
     }
 
     private const INVITATION = '2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26';
@@ -55,7 +83,7 @@ final class EnrollmentClientTest extends TestCase
         $thumbprint = KeyThumbprint::compute($jwk);
         $wire = new SignedFakeWire();
         $wire->responseQueue = [
-            ['status' => 200, 'body' => json_encode(['keyId' => self::KEY, 'thumbprint' => $thumbprint, 'challenge' => 'one-use', 'challengeGeneration' => 4], JSON_THROW_ON_ERROR), 'headers' => ['X-Request-Id' => 'enroll-1']],
+            ['status' => 200, 'body' => json_encode(['keyId' => self::KEY, 'thumbprint' => $thumbprint, 'safetyCode' => '999999', 'challenge' => 'one-use', 'challengeGeneration' => 4], JSON_THROW_ON_ERROR), 'headers' => ['X-Request-Id' => 'enroll-1']],
             ['status' => 200, 'body' => '{"state":"pendingApproval"}', 'headers' => ['X-Request-Id' => 'enroll-2']],
         ];
         $factory = new HttpFactory();
@@ -68,11 +96,36 @@ final class EnrollmentClientTest extends TestCase
         self::assertSame('pendingApproval', $status->state);
         self::assertCount(3, $wire->requests);
         self::assertSame('Enrollment enrollment-secret', $wire->requests[0]->getHeaderLine('Authorization'));
+        self::assertSame('Enrollment enrollment-secret', $wire->requests[2]->getHeaderLine('Authorization'));
         self::assertSame('', $wire->requests[0]->getHeaderLine('Signature'));
         self::assertSame('', $wire->requests[2]->getHeaderLine('Signature'));
+        self::assertSame('', $wire->requests[0]->getHeaderLine('Signature-Input'));
+        self::assertSame('', $wire->requests[2]->getHeaderLine('Signature-Input'));
         self::assertStringContainsString('/keys', (string) $wire->requests[0]->getUri());
         self::assertStringContainsString('/proof', (string) $wire->requests[2]->getUri());
         self::assertStringNotContainsString('private-material', (string) $wire->requests[0]->getBody());
+        self::assertStringNotContainsString('cidrs', (string) $wire->requests[0]->getBody());
+        $proof = json_decode((string) $wire->requests[2]->getBody(), true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($proof) || !is_string($proof['keyId'] ?? null) || !is_int($proof['challengeGeneration'] ?? null) || !is_string($proof['signature'] ?? null)) {
+            self::fail('The proof request must contain its key ID, challenge generation, and signature.');
+        }
+        self::assertSame(self::KEY, $proof['keyId']);
+        self::assertSame(4, $proof['challengeGeneration']);
+        $proofSignature = Base64Url::decode($proof['signature']);
+        self::assertNotNull($proofSignature);
+        $x = Base64Url::decode($jwk->x ?? '');
+        $y = Base64Url::decode($jwk->y ?? '');
+        self::assertNotNull($x);
+        self::assertNotNull($y);
+        $publicDer = hex2bin('3059301306072a8648ce3d020106082a8648ce3d030107034200') . "\x04" . $x . $y;
+        $publicKey = openssl_pkey_get_public("-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($publicDer), 64, "\n") . "-----END PUBLIC KEY-----\n");
+        self::assertNotFalse($publicKey);
+        self::assertSame(1, openssl_verify(
+            EnrollmentProof::message(self::KEY, 4, 'one-use', $thumbprint),
+            EcdsaSignatureFormat::p1363ToDer($proofSignature),
+            $publicKey,
+            OPENSSL_ALGO_SHA256,
+        ));
     }
 
     #[Test]

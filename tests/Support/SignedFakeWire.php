@@ -7,8 +7,12 @@ namespace Anis\Partners\Tests\Support;
 use Anis\Partners\Signing\EcdsaSignatureFormat;
 use Anis\Partners\Signing\PemP256Signer;
 use Anis\Partners\Signing\RequestSigner;
+use Anis\Partners\Verification\PartnerJwk;
 use Anis\Partners\Verification\PartnerResponseSignatureBase;
 use GuzzleHttp\Psr7\Response;
+use OpenTelemetry\API\Trace\SpanInterface;
+use OpenTelemetry\Context\Context;
+use OpenTelemetry\Context\ContextKeys;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -26,6 +30,7 @@ final class SignedFakeWire implements ClientInterface
     public array $responseQueue = [];
     public bool $tamperAfterSigning = false;
     public ?\Throwable $failure = null;
+    public ?SpanInterface $activeSpanAtSend = null;
 
     private readonly PemP256Signer $responseSigner;
     private readonly \OpenSSLAsymmetricKey $privateKey;
@@ -47,6 +52,8 @@ final class SignedFakeWire implements ClientInterface
     /** Sends a request to the script and preserves it for assertions about exact wire bytes. */
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
+        $activeSpan = Context::getCurrent()->get(ContextKeys::span());
+        $this->activeSpanAtSend = $activeSpan instanceof SpanInterface ? $activeSpan : null;
         $this->requests[] = $request;
         if (str_ends_with((string) $request->getUri(), '/.well-known/partner-signing-keys.json')) {
             $jwk = $this->responseSigner->publicJwk()->toArray();
@@ -93,6 +100,12 @@ final class SignedFakeWire implements ClientInterface
     public function requestSigner(): RequestSigner
     {
         return $this->requestSigner;
+    }
+
+    /** Provides the public half of the request key for independent wire-signature assertions. */
+    public function requestPublicJwk(): PartnerJwk
+    {
+        return $this->responseSigner->publicJwk();
     }
 
     /** @param string|list<string>|null $values */

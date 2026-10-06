@@ -9,7 +9,7 @@ final readonly class OrderOutcomeUnknown extends OrderResult
 {
     /**
      * Keeps the cause available for local handling while preventing accidental new-order retries.
-     * Keeps these public partner values stable after construction.
+     *
      */
     public function __construct(
         string $operationId,

@@ -36,7 +36,7 @@ final readonly class CreateOrderRequest implements \JsonSerializable
         $unitPrice = ModelData::object($data, 'expectedUnitPrice');
         $total = ModelData::object($data, 'expectedTotal');
         if ($unitPrice === null || $total === null || !array_key_exists('quantity', $data)) {
-            throw new \UnexpectedValueException('An order request requires quantity and both prices.');
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('An order request requires quantity and both prices.');
         }
 
         return new self(
@@ -87,7 +87,7 @@ final readonly class CreateOrderRequest implements \JsonSerializable
     private static function requireInteger(mixed $value): int
     {
         if (!is_int($value)) {
-            throw new \InvalidArgumentException('Order quantity must be an integer.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Order quantity must be an integer.');
         }
 
         return $value;
@@ -96,7 +96,7 @@ final readonly class CreateOrderRequest implements \JsonSerializable
     private static function requireBoolean(mixed $value): bool
     {
         if (!is_bool($value)) {
-            throw new \InvalidArgumentException('UseAllowedDebt consent must be a boolean.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('UseAllowedDebt consent must be a boolean.');
         }
 
         return $value;

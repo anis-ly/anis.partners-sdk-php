@@ -15,7 +15,7 @@ final readonly class SignatureInputs
 
     /**
      * Canonicalizes shared wire values once; later normalization can sign values different from those sent.
-     * Keeps these public partner values stable after construction.
+     *
      */
     public function __construct(
         string $method,
@@ -24,16 +24,17 @@ final readonly class SignatureInputs
         public string $canonicalQuery,
         public string $anisDate,
         public ?string $contentDigest = null,
+        #[\SensitiveParameter]
         public ?string $nonce = null,
         ?string $idempotencyKey = null,
     ) {
         if (str_contains($path, '%')) {
-            throw new \InvalidArgumentException('Signed paths cannot contain percent encoding.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Signed paths cannot contain percent encoding.');
         }
 
         $this->method = strtoupper($method);
         $this->authority = strtolower($authority);
-        $this->idempotencyKey = $idempotencyKey === null ? null : Uuid::canonical($idempotencyKey);
+        $this->idempotencyKey = $idempotencyKey === null ? null : Uuid::canonical($idempotencyKey, 'idempotency key');
     }
 
     /** Returns one exact component value or refuses missing and unrecognized components. */
@@ -49,12 +50,12 @@ final readonly class SignatureInputs
             'nonce' => $this->nonce ?? throw self::missing($component),
             'idempotency-key' => $this->idempotencyKey ?? throw self::missing($component),
             'x-anis-date' => $this->anisDate,
-            default => throw new \InvalidArgumentException('Not a covered component of an Anis signature profile.'),
+            default => throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Not a covered component of an Anis signature profile.'),
         };
     }
 
-    private static function missing(string $component): \InvalidArgumentException
+    private static function missing(string $component): \Anis\Partners\Errors\AnisPartnersInvalidArgumentException
     {
-        return new \InvalidArgumentException("The covered component '{$component}' has no value.");
+        return new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException("The covered component '{$component}' has no value.");
     }
 }

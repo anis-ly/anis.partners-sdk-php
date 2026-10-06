@@ -14,9 +14,9 @@ enum OrderStatus: string
     case Failed = 'failed';
 
     /** Resolves known wire spellings case-insensitively and keeps unknown states readable. */
-    public static function parse(?string $value): self
+    public static function parse(mixed $value): self
     {
-        return match (strtolower($value ?? '')) {
+        return match (is_string($value) ? strtolower($value) : '') {
             'processing' => self::Processing,
             'recoveryexhausted' => self::RecoveryExhausted,
             'completed' => self::Completed,

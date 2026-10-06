@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please do not open a public issue for a security problem. Email **support@anis.ly** with a description, the package
-version, and steps to reproduce it.
+version, and steps to reproduce it. Anis aims to acknowledge reports within five working days.
 
 ## Supported versions
 

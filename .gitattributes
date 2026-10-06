@@ -8,3 +8,4 @@
 /.php-cs-fixer.dist.php export-ignore
 /.gitattributes export-ignore
 /.gitignore export-ignore
+/contracts export-ignore

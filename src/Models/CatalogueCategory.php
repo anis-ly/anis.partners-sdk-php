@@ -8,7 +8,7 @@ namespace Anis\Partners\Models;
 final readonly class CatalogueCategory implements \JsonSerializable
 {
     use WireJsonSerialization;
-    /** Keeps these public partner values stable after construction. */
+
     public function __construct(
         public string $id,
         public ?LocalizedText $name = null,
@@ -33,7 +33,7 @@ final readonly class CatalogueCategory implements \JsonSerializable
             $name === null ? null : LocalizedText::fromArray($name),
             $description === null ? null : LocalizedText::fromArray($description),
             ModelData::nullableString($data, 'logo'),
-            CatalogueCategoryType::parse(ModelData::nullableString($data, 'type')),
+            CatalogueCategoryType::parse($data['type'] ?? null),
             ModelData::boolean($data, 'inStock'),
             ModelData::integer($data, 'displayOrder'),
         );

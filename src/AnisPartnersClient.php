@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Anis\Partners;
 
+use Anis\Partners\Internal\Uuid;
 use Anis\Partners\Operations\CatalogueOperations;
 use Anis\Partners\Operations\DiagnosticsOperations;
 use Anis\Partners\Operations\OrderOperations;
@@ -11,7 +12,10 @@ use Anis\Partners\Operations\OwnedCardOperations;
 use Anis\Partners\Operations\PartnerTransport;
 use Anis\Partners\Operations\ProfileOperations;
 use Anis\Partners\Operations\WalletOperations;
+use Anis\Partners\Signing\NonceFactory;
+use Anis\Partners\Signing\RandomNonceFactory;
 use Anis\Partners\Signing\RequestSigner;
+use Anis\Partners\Signing\RequestSigningException;
 use Anis\Partners\Verification\HttpSigningKeySource;
 use Anis\Partners\Verification\PartnerResponseVerifier;
 use Http\Discovery\Psr17FactoryDiscovery;
@@ -43,14 +47,20 @@ final class AnisPartnersClient
         ?StreamFactoryInterface $streams = null,
         ?CacheInterface $keyCache = null,
         ?LoggerInterface $logger = null,
+        ?NonceFactory $nonceFactory = null,
     ): self {
+        try {
+            Uuid::canonical($signer->keyId(), 'key id');
+        } catch (\Throwable $exception) {
+            throw new RequestSigningException($exception);
+        }
         $http ??= Psr18ClientDiscovery::find();
         $requests ??= Psr17FactoryDiscovery::findRequestFactory();
         $streams ??= Psr17FactoryDiscovery::findStreamFactory();
         $clock = new \Anis\Partners\Internal\SystemClock();
-        $keys = new HttpSigningKeySource($http, $requests, $options->authority, $options->signingKeyCacheSeconds, $keyCache, $clock, $logger);
-        $verifier = new PartnerResponseVerifier($keys, $clock, $logger);
-        $transport = new PartnerTransport($http, $requests, $streams, $options, $signer, $verifier, $clock, $logger);
+        $keys = new HttpSigningKeySource($http, $requests, $options->authority, $options->signingKeyCacheSeconds, $keyCache, $clock, $logger, $options->name);
+        $verifier = new PartnerResponseVerifier($keys, $clock, $logger, $options->name);
+        $transport = new PartnerTransport($http, $requests, $streams, $options, $signer, $verifier, $clock, $logger, $nonceFactory ?? new RandomNonceFactory());
 
         return new self(
             new ProfileOperations($transport),

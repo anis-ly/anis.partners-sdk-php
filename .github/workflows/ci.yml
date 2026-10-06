@@ -18,10 +18,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ runner.os }}-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-${{ matrix.php }}-
+
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: openssl, json, mbstring
+          extensions: openssl, json
           coverage: none
 
       - name: Validate composer.json
@@ -30,7 +36,7 @@ jobs:
       - name: Install
         run: composer install --no-interaction --no-progress
 
-      - name: Tests (every conformance vector and every .NET twin)
+      - name: Tests
         run: vendor/bin/phpunit
 
       # Style and static analysis do not depend on the runtime version; run them once.
@@ -39,3 +45,26 @@ jobs:
         run: |
           vendor/bin/php-cs-fixer fix --dry-run --diff
           vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+
+  lowest-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: openssl, json
+          coverage: none
+      - uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-lowest-${{ runner.os }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-lowest-${{ runner.os }}-
+      - name: Install lowest supported dependencies
+        run: composer update --prefer-lowest --prefer-stable --no-interaction --no-progress
+      - name: Validate package metadata
+        run: composer validate --strict
+      - name: Audit lowest supported dependencies
+        run: composer audit
+      - name: Test lowest supported dependencies
+        run: vendor/bin/phpunit

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Anis\Partners\Operations;
 
 use Anis\Partners\Errors\AnisApiException;
+use Anis\Partners\Errors\EmptyBodyException;
 use Anis\Partners\Errors\OrderRefusalOutcome;
 use Anis\Partners\Errors\OrderRefusals;
+use Anis\Partners\Internal\RetryAfter;
 use Anis\Partners\Internal\Uuid;
 use Anis\Partners\Models\CreateOrderRequest;
 use Anis\Partners\Models\Order;
@@ -49,7 +51,7 @@ final class OrderOperations extends AbstractOperations
     /** Reads order state without dispatching work or returning credentials. */
     public function get(string $operationId): Order
     {
-        $id = Uuid::canonical($operationId);
+        $id = Uuid::canonical($operationId, 'operation id');
         /** @var Order */
         return $this->fetchModel($this->transport, '/v1/orders/{operationId}', 'v1/orders/' . $id, [Order::class, 'fromArray']);
     }
@@ -57,24 +59,33 @@ final class OrderOperations extends AbstractOperations
     private function send(string $walletId, string $operationId, CreateOrderRequest $order, bool $resuming): OrderResult
     {
         self::guard($order);
-        $wallet = Uuid::canonical($walletId);
-        $operation = Uuid::canonical($operationId);
+        $wallet = Uuid::canonical($walletId, 'wallet id');
+        $operation = Uuid::canonical($operationId, 'operation id');
         $result = null;
         $outcome = 'unknown';
         $reason = null;
         $delay = self::DEFAULT_DELAY_SECONDS;
+        try {
+            $body = $order->toJson();
+        } catch (\Throwable $exception) {
+            throw new RequestSigningException($exception);
+        }
         try {
             $response = $this->transport->request(
                 'POST',
                 '/v1/wallets/{walletId}/orders',
                 'v1/wallets/' . $wallet . '/orders',
                 SignatureProfile::OrderMutation,
-                $order->toJson(),
+                $body,
                 $operation,
             );
-            $value = Order::fromArray($response->json);
+            try {
+                $value = Order::fromArray($response->json);
+            } catch (\Throwable) {
+                throw new \Anis\Partners\Errors\MalformedResponseException('The verified order answer does not match the order model.');
+            }
             if ($response->status === 202) {
-                $result = new OrderProcessing($value, self::retryAfter($response->header('Retry-After')) ?? self::DEFAULT_DELAY_SECONDS, $response->header('Location'));
+                $result = new OrderProcessing($value, RetryAfter::parse($response->header('Retry-After')) ?? self::DEFAULT_DELAY_SECONDS, $response->header('Location'));
                 $outcome = 'processing';
             } elseif (($value->soldCards ?? []) !== []) {
                 $result = new OrderCompleted($value);
@@ -103,8 +114,15 @@ final class OrderOperations extends AbstractOperations
         }
 
         // Reporting is deliberately outside purchase handling: host instrumentation cannot replace a verified result.
-        AnisPartnersTelemetry::orderOutcome($outcome, $reason);
-        Log::write($this->logger ?? new \Psr\Log\NullLogger(), $outcome === 'unknown' ? 'warning' : 'info', $outcome === 'unknown' ? 'Anis order outcome unknown; resume with the same operation id' : 'Anis order outcome', $outcome === 'unknown' ? 1008 : 1004, ['operation_id' => $operation, 'outcome' => $outcome] + ($reason === null ? [] : ['reason' => $reason]));
+        if ($outcome !== 'not_placed') {
+            AnisPartnersTelemetry::orderOutcome($outcome, $reason, $this->transport->clientName());
+        }
+        if ($outcome !== 'not_placed') {
+            $message = $outcome === 'unknown'
+                ? sprintf('Anis could not determine order operation %s: %s; resume it with the same operation id, never a new one.', $operation, $reason ?? 'unknown')
+                : sprintf('Anis order outcome %s for operation %s', $outcome, $operation);
+            Log::write($this->logger ?? new \Psr\Log\NullLogger(), $outcome === 'unknown' ? 'warning' : 'info', $message, $outcome === 'unknown' ? 1008 : 1004, ['operation_id' => $operation, 'outcome' => $outcome] + ($reason === null ? [] : ['reason' => $reason]));
+        }
 
         return $result;
     }
@@ -113,16 +131,16 @@ final class OrderOperations extends AbstractOperations
     private static function guard(CreateOrderRequest $order): void
     {
         if ($order->quantity < 1) {
-            throw new \InvalidArgumentException('An order must be for at least one card.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('An order must be for at least one card.');
         }
         if ($order->expectedUnitPrice->thousandths <= 0) {
-            throw new \InvalidArgumentException('ExpectedUnitPrice must be greater than zero.');
-        }
-        if ($order->expectedUnitPrice->currency !== $order->expectedTotal->currency) {
-            throw new \InvalidArgumentException('ExpectedUnitPrice and ExpectedTotal must carry the same currency.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('ExpectedUnitPrice must be greater than zero.');
         }
         if ($order->expectedUnitPrice->multiply($order->quantity)->thousandths !== $order->expectedTotal->thousandths) {
-            throw new \InvalidArgumentException('ExpectedTotal must equal unit price multiplied by quantity.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('ExpectedTotal must equal unit price multiplied by quantity.');
+        }
+        if ($order->expectedUnitPrice->currency !== $order->expectedTotal->currency) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('ExpectedUnitPrice and ExpectedTotal must carry the same currency.');
         }
     }
 
@@ -142,7 +160,7 @@ final class OrderOperations extends AbstractOperations
 
     private static function reason(\Throwable $exception): string
     {
-        if ($exception instanceof AnisApiException && $exception->errorCode->value === 'internal_error' && $exception->problem->title === 'Empty body') {
+        if ($exception instanceof EmptyBodyException) {
             return 'empty_body';
         }
         if ($exception instanceof AnisApiException) {
@@ -161,8 +179,4 @@ final class OrderOperations extends AbstractOperations
         return 'other';
     }
 
-    private static function retryAfter(?string $value): ?int
-    {
-        return $value !== null && preg_match('/\A[0-9]+\z/D', $value) === 1 ? (int) $value : null;
-    }
 }

@@ -6,9 +6,12 @@ namespace Anis\Partners\Operations;
 
 use Anis\Partners\ClientOptions;
 use Anis\Partners\Errors\AnisApiException;
+use Anis\Partners\Errors\EmptyBodyException;
+use Anis\Partners\Errors\MalformedResponseException;
 use Anis\Partners\Observability\AnisPartnersTelemetry;
 use Anis\Partners\Observability\Log;
 use Anis\Partners\Signing\ContentDigest;
+use Anis\Partners\Signing\NonceFactory;
 use Anis\Partners\Signing\PartnerRequestSigner;
 use Anis\Partners\Signing\RandomNonceFactory;
 use Anis\Partners\Signing\RequestSigner;
@@ -16,6 +19,7 @@ use Anis\Partners\Signing\RequestSigningException;
 use Anis\Partners\Signing\SignatureInputs;
 use Anis\Partners\Signing\SignatureProfile;
 use Anis\Partners\Verification\PartnerResponseVerifier;
+use Anis\Partners\Verification\SigningKeysUnavailableException;
 use Anis\Partners\Verification\VerifiableResponse;
 use OpenTelemetry\API\Trace\StatusCode;
 use Psr\Clock\ClockInterface;
@@ -23,6 +27,7 @@ use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /** Freezes, signs, sends, verifies, and only then decodes each partner response. */
 final class PartnerTransport
@@ -37,16 +42,19 @@ final class PartnerTransport
         private readonly PartnerResponseVerifier $verifier,
         private readonly ClockInterface $clock,
         private readonly ?LoggerInterface $logger = null,
+        private readonly ?NonceFactory $nonceFactory = null,
     ) {}
 
     /** Sends one signed request and parses only its verified JSON body. */
     public function request(string $method, string $template, string $path, ?SignatureProfile $profile, ?string $body = null, ?string $operationId = null, bool $enrollment = false): TransportResponse
     {
         $startedAt = microtime(true);
-        $span = AnisPartnersTelemetry::startRequest($template, $method, $operationId);
+        $span = AnisPartnersTelemetry::startRequest($template, $method, $operationId, $this->options->name);
+        $spanScope = AnisPartnersTelemetry::activate($span);
         $statusCode = null;
         $errorType = null;
         $errorCode = null;
+        $handedToHttp = false;
         try {
             $uri = rtrim($this->options->authority, '/') . '/' . ltrim($path, '/');
             $request = $this->requests->createRequest($method, $uri);
@@ -63,16 +71,17 @@ final class PartnerTransport
             }
             if ($enrollment) {
                 if ($this->enrollmentToken === null) {
-                    throw new \LogicException('An enrollment token is required for an enrollment request.');
+                    throw new \Anis\Partners\Errors\AnisPartnersLogicException('An enrollment token is required for an enrollment request.');
                 }
-                $request = $request->withHeader('Authorization', 'Enrollment ' . $this->enrollmentToken);
+                $request = $request->withHeader('Authorization', 'Enrollment ' . $this->enrollmentTokenValue());
             } elseif ($profile !== null) {
                 if ($this->signer === null) {
-                    throw new \LogicException('A request signer is required for signed partner routes.');
+                    throw new \Anis\Partners\Errors\AnisPartnersLogicException('A request signer is required for signed partner routes.');
                 }
-                $nonce = $profile === SignatureProfile::SafeRead ? null : (new RandomNonceFactory())->create();
+                $nonce = $profile === SignatureProfile::SafeRead ? null : ($this->nonceFactory ?? new RandomNonceFactory())->create();
                 $digest = $profile === SignatureProfile::SafeRead ? null : ContentDigest::of($body);
-                $date = $this->clock->now()->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z');
+                $now = $this->clock->now()->setTimezone(new \DateTimeZone('UTC'));
+                $date = $now->format('Y-m-d\TH:i:s\Z');
                 $requestUri = $request->getUri();
                 $scheme = strtolower($requestUri->getScheme());
                 $port = $requestUri->getPort();
@@ -81,7 +90,7 @@ final class PartnerTransport
                 $requestTarget = $requestUri->getPath() === '' ? '/' : $requestUri->getPath();
                 $query = $requestUri->getQuery();
                 $inputs = new SignatureInputs($method, $authority, $requestTarget, $query, $date, $digest, $nonce, $operationId);
-                $created = $this->clock->now()->getTimestamp();
+                $created = $now->getTimestamp();
                 $expires = $created + $this->options->signatureLifetimeSeconds;
                 $signingStarted = microtime(true);
                 $signed = (new PartnerRequestSigner($this->signer))->sign($profile, $inputs, $created, $expires);
@@ -97,13 +106,14 @@ final class PartnerTransport
                 if ($signed->idempotencyKey !== null) {
                     $request = $request->withHeader('Idempotency-Key', $signed->idempotencyKey);
                 }
-                Log::write($this->logger ?? new \Psr\Log\NullLogger(), 'debug', 'Anis request signed', 1000, ['method' => strtoupper($method), 'path' => $template, 'profile' => $profile->value, 'key_id' => $this->signer->keyId()]);
-                AnisPartnersTelemetry::signatureDuration((microtime(true) - $signingStarted) * 1000, $profile->value);
+                Log::write($this->logger ?? new NullLogger(), 'debug', 'Anis request signed for {method} {route}', 1000, ['method' => strtoupper($method), 'route' => $template, 'profile' => $profile->value, 'key_id' => $this->signer->keyId()]);
+                AnisPartnersTelemetry::signatureDuration((microtime(true) - $signingStarted) * 1000, $profile->value, $this->options->name);
             }
 
             $request = $request->withHeader('Accept-Encoding', 'identity');
 
             $started = microtime(true);
+            $handedToHttp = true;
             $response = $this->http->sendRequest($request);
             $statusCode = $response->getStatusCode();
             $bytes = (string) $response->getBody();
@@ -126,12 +136,12 @@ final class PartnerTransport
             if ($requestId !== '') {
                 AnisPartnersTelemetry::setAttribute($span, 'anis.request_id', $requestId);
             }
-            Log::write($this->logger ?? new \Psr\Log\NullLogger(), 'debug', 'Anis response received', 1001, ['method' => strtoupper($method), 'route' => $template, 'status_code' => $response->getStatusCode(), 'elapsed_ms' => $elapsed, 'request_id' => $response->getHeaderLine('X-Request-Id')]);
+            Log::write($this->logger ?? new NullLogger(), 'debug', sprintf('Anis %s %s response status %d in %.2f ms, request %s', strtoupper($method), $template, $response->getStatusCode(), $elapsed, $requestId), 1001, ['method' => strtoupper($method), 'route' => $template, 'status_code' => $response->getStatusCode(), 'elapsed_ms' => $elapsed, 'request_id' => $requestId]);
             if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
                 $error = AnisApiException::fromResponse($response->getStatusCode(), $rawHeaders, $bytes);
                 AnisPartnersTelemetry::setAttribute($span, 'anis.error.code', $error->rawCode ?? $error->errorCode->value);
                 $errorCode = $error->rawCode ?? $error->errorCode->value;
-                Log::write($this->logger ?? new \Psr\Log\NullLogger(), 'warning', 'Anis refused request', 1002, ['method' => strtoupper($method), 'route' => $template, 'code' => $error->rawCode, 'status_code' => $error->status, 'request_id' => $error->requestId, 'retryable' => $error->isRetryable, 'replayed' => $error->isReplayed]);
+                Log::write($this->logger ?? new NullLogger(), 'warning', 'Anis refused {method} {route}: {code} ({status_code}), request {request_id}, retryable {retryable}, replayed {replayed}', 1002, ['method' => strtoupper($method), 'route' => $template, 'code' => $error->rawCode, 'status_code' => $error->status, 'request_id' => $error->requestId, 'retryable' => $error->isRetryable, 'replayed' => $error->isReplayed]);
                 throw $error;
             }
             if ($bytes === '') {
@@ -140,52 +150,95 @@ final class PartnerTransport
             try {
                 $decoded = json_decode($bytes, true, 512, JSON_THROW_ON_ERROR);
             } catch (\JsonException $exception) {
-                throw $exception;
+                throw new MalformedResponseException('The Anis response could not be decoded.');
             }
             if ($decoded === null) {
                 throw AnisApiException::emptyBody($response->getStatusCode());
             }
             if (!is_array($decoded)) {
-                throw new \UnexpectedValueException('A successful Anis response must be a JSON object.');
+                throw new MalformedResponseException('The Anis response must be a JSON object.');
             }
 
             return new TransportResponse($response->getStatusCode(), $headers, $decoded, $bytes, $rawHeaders);
         } catch (\Throwable $exception) {
+            if (!$handedToHttp && !$exception instanceof RequestSigningException) {
+                $exception = new RequestSigningException($exception);
+            }
             if ($exception instanceof RequestSigningException) {
                 $errorType = 'signing';
-            } elseif ($exception instanceof \Anis\Partners\Verification\UnverifiableResponseException) {
-                $errorType = 'unverifiable';
-            } elseif ($exception instanceof \Psr\Http\Client\ClientExceptionInterface) {
-                $errorType = 'connection';
-                Log::write($this->logger ?? new \Psr\Log\NullLogger(), 'warning', 'Anis request ended without a usable answer', 1007, ['method' => strtoupper($method), 'route' => $template, 'reason' => $errorType]);
+            } elseif ($exception instanceof AnisApiException && !$exception instanceof EmptyBodyException) {
+                $errorType = null;
+            } elseif ($exception instanceof EmptyBodyException) {
+                $errorType = 'empty_body';
             } else {
-                $errorType = 'other';
+                $errorType = self::errorType($exception);
+            }
+            if ($errorType !== null && !($exception instanceof AnisApiException && !$exception instanceof EmptyBodyException)) {
+                $elapsed = (microtime(true) - $startedAt) * 1000;
+                Log::write($this->logger ?? new NullLogger(), 'warning', 'Anis request ended without a usable answer: {method} {route} ({reason}) in {elapsed_ms} ms', 1007, ['method' => strtoupper($method), 'route' => $template, 'reason' => $errorType, 'elapsed_ms' => $elapsed]);
             }
             if ($exception instanceof AnisApiException) {
                 $errorCode = $exception->rawCode ?? $exception->errorCode->value;
-                if ($exception->problem->title === 'Empty body') {
-                    $errorType = 'empty_body';
-                }
+
             }
-            AnisPartnersTelemetry::setStatus($span, StatusCode::STATUS_ERROR, $errorType);
-            AnisPartnersTelemetry::setAttribute($span, 'error.type', $errorType);
+            AnisPartnersTelemetry::setStatus($span, StatusCode::STATUS_ERROR, $errorType ?? $errorCode);
             if ($exception instanceof AnisApiException) {
                 AnisPartnersTelemetry::setAttribute($span, 'anis.error.code', $exception->rawCode ?? $exception->errorCode->value);
             }
             throw $exception;
         } finally {
-            AnisPartnersTelemetry::requestDuration((microtime(true) - $startedAt) * 1000, $template, $method, $statusCode, $errorType, $errorCode);
+            AnisPartnersTelemetry::requestDuration((microtime(true) - $startedAt) * 1000, $template, $method, $statusCode, $errorCode, $errorType, $this->options->name);
+            if ($spanScope !== null) {
+                try {
+                    $spanScope->detach();
+                } catch (\Throwable) {
+                }
+            }
             AnisPartnersTelemetry::end($span);
         }
     }
 
-    private ?string $enrollmentToken = null;
+    private ?\SensitiveParameterValue $enrollmentToken = null;
+
+    /** Returns the configured label used on this client's telemetry. */
+    public function clientName(): string
+    {
+        return $this->options->name;
+    }
+
+    private function enrollmentTokenValue(): string
+    {
+        $value = $this->enrollmentToken?->getValue();
+        if (!is_string($value)) {
+            throw new \Anis\Partners\Errors\AnisPartnersLogicException('An enrollment token is required for an enrollment request.');
+        }
+
+        return $value;
+    }
+
+    private static function errorType(\Throwable $exception): string
+    {
+        if ($exception instanceof SigningKeysUnavailableException) {
+            return 'connection';
+        }
+        if ($exception instanceof \Psr\Http\Client\ClientExceptionInterface && str_contains(strtolower($exception::class), 'timeout')) {
+            return 'timeout';
+        }
+        if ($exception instanceof \Psr\Http\Client\NetworkExceptionInterface || $exception instanceof \Psr\Http\Client\ClientExceptionInterface) {
+            return 'connection';
+        }
+        if ($exception instanceof \Anis\Partners\Verification\UnverifiableResponseException || $exception instanceof MalformedResponseException) {
+            return 'unverifiable';
+        }
+
+        return 'other';
+    }
 
     /** Attaches the one-use enrollment token for an unsigned request. */
-    public function withEnrollmentToken(string $token): self
+    public function withEnrollmentToken(#[\SensitiveParameter] string $token): self
     {
         $copy = clone $this;
-        $copy->enrollmentToken = $token;
+        $copy->enrollmentToken = new \SensitiveParameterValue($token);
 
         return $copy;
     }

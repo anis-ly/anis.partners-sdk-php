@@ -38,6 +38,36 @@ final class OrderOperationsTest extends TestCase
         yield 'not placed' => [409, '{"status":409,"code":"insufficient_balance"}', [], OrderNotPlaced::class];
     }
 
+    /** @return iterable<string, array{int, string, bool}> */
+    public static function doorRefusalCases(): iterable
+    {
+        foreach ([
+            'invalid_credentials' => 401,
+            'signature_expired' => 401,
+            'insufficient_scope' => 403,
+            'wallet_not_granted' => 403,
+            'malformed_signed_request' => 400,
+        ] as $code => $status) {
+            yield 'create ' . $code => [$status, $code, false];
+            yield 'resume ' . $code => [$status, $code, true];
+        }
+    }
+
+    /** @return iterable<string, array{CreateOrderRequest, bool}> */
+    public static function invalidOrderGuards(): iterable
+    {
+        $orders = [
+            'zero quantity' => new CreateOrderRequest(self::CARD, 0, Money::of('10.5', 'LYD'), Money::of('0', 'LYD')),
+            'zero unit price' => new CreateOrderRequest(self::CARD, 1, Money::of('0.000', 'LYD'), Money::of('0.000', 'LYD')),
+            'currency mismatch' => new CreateOrderRequest(self::CARD, 1, Money::of('10', 'LYD'), Money::of('10', 'USD')),
+            'total mismatch' => new CreateOrderRequest(self::CARD, 2, Money::of('10', 'LYD'), Money::of('19', 'LYD')),
+        ];
+        foreach ($orders as $name => $order) {
+            yield 'create ' . $name => [$order, false];
+            yield 'resume ' . $name => [$order, true];
+        }
+    }
+
     /** @param array<string, string> $headers @param class-string<object> $expected */
     #[Test]
     #[DataProvider('outcomeCases')]
@@ -198,7 +228,7 @@ final class OrderOperationsTest extends TestCase
         $result = self::client($wire)->orders()->create(self::WALLET, self::OPERATION, self::order());
 
         self::assertInstanceOf(OrderOutcomeUnknown::class, $result);
-        self::assertInstanceOf(\JsonException::class, $result->cause);
+        self::assertInstanceOf(\Anis\Partners\Errors\MalformedResponseException::class, $result->cause);
     }
 
     #[Test]
@@ -268,6 +298,37 @@ final class OrderOperationsTest extends TestCase
     }
 
     #[Test]
+    #[DataProvider('doorRefusalCases')]
+    public function it_keeps_door_refusals_unknown_for_create_and_resume(int $status, string $code, bool $resume): void
+    {
+        $wire = new SignedFakeWire();
+        $wire->status = $status;
+        $wire->body = json_encode(['status' => $status, 'code' => $code], JSON_THROW_ON_ERROR);
+
+        $operations = self::client($wire)->orders();
+        $result = $resume
+            ? $operations->resume(self::WALLET, self::OPERATION, self::order())
+            : $operations->create(self::WALLET, self::OPERATION, self::order());
+
+        self::assertInstanceOf(OrderOutcomeUnknown::class, $result);
+        self::assertSame(60, $result->suggestedDelaySeconds);
+    }
+
+    #[Test]
+    public function it_honors_a_zero_retry_after_for_a_door_refusal(): void
+    {
+        $wire = new SignedFakeWire();
+        $wire->status = 403;
+        $wire->body = '{"status":403,"code":"insufficient_scope"}';
+        $wire->responseHeaders = ['X-Request-Id' => 'door-test', 'Retry-After' => '0'];
+
+        $result = self::client($wire)->orders()->create(self::WALLET, self::OPERATION, self::order());
+
+        self::assertInstanceOf(OrderOutcomeUnknown::class, $result);
+        self::assertSame(0, $result->suggestedDelaySeconds);
+    }
+
+    #[Test]
     public function it_refuses_non_positive_prices_before_opening_the_wire(): void
     {
         $wire = new SignedFakeWire();
@@ -293,6 +354,25 @@ final class OrderOperationsTest extends TestCase
             self::client($wire)->orders()->create(self::WALLET, self::OPERATION, $order);
         } finally {
             self::assertCount(0, $wire->requests);
+        }
+    }
+
+    #[Test]
+    #[DataProvider('invalidOrderGuards')]
+    public function it_applies_local_order_guards_to_create_and_resume_without_sending(CreateOrderRequest $order, bool $resume): void
+    {
+        $wire = new SignedFakeWire();
+        $operations = self::client($wire)->orders();
+
+        try {
+            if ($resume) {
+                $operations->resume(self::WALLET, self::OPERATION, $order);
+            } else {
+                $operations->create(self::WALLET, self::OPERATION, $order);
+            }
+            self::fail('An invalid order must be refused by the local guard.');
+        } catch (\InvalidArgumentException) {
+            self::assertSame([], $wire->requests);
         }
     }
 

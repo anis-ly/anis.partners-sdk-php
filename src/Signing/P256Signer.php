@@ -8,5 +8,5 @@ namespace Anis\Partners\Signing;
 interface P256Signer
 {
     /** Returns exactly 64 IEEE P1363 bytes (r followed by s), the form the Partner wire protocol verifies. */
-    public function sign(string $data): string;
+    public function sign(#[\SensitiveParameter] string $data): string;
 }

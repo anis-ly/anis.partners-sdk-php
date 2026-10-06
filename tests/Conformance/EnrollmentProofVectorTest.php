@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace Anis\Partners\Tests\Conformance;
 
 use Anis\Partners\Enrollment\EnrollmentProof;
+use Anis\Partners\Enrollment\KeyThumbprint;
 use Anis\Partners\Internal\Base64Url;
 use Anis\Partners\Signing\EcdsaSignatureFormat;
 use Anis\Partners\Signing\PemP256Signer;
 use Anis\Partners\Tests\Support\JsonFixture;
+use Anis\Partners\Verification\PartnerJwk;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -38,11 +40,19 @@ final class EnrollmentProofVectorTest extends TestCase
         $result = JsonFixture::object($vector['keySubmissionResult'] ?? null);
         $expected = JsonFixture::object($vector['expected'] ?? null);
         $key = JsonFixture::object($vector['key'] ?? null);
+        $publicJwk = JsonFixture::object($key['publicJwk'] ?? null);
+        $thumbprint = KeyThumbprint::compute(new PartnerJwk(
+            JsonFixture::string($publicJwk, 'kty'),
+            JsonFixture::string($publicJwk, 'crv'),
+            JsonFixture::string($publicJwk, 'x'),
+            JsonFixture::string($publicJwk, 'y'),
+        ));
+        self::assertSame(JsonFixture::string($result, 'thumbprint'), $thumbprint);
         $message = EnrollmentProof::message(
             JsonFixture::string($result, 'keyId'),
             JsonFixture::integer($result, 'challengeGeneration'),
             JsonFixture::string($result, 'challenge'),
-            JsonFixture::string($result, 'thumbprint'),
+            $thumbprint,
         );
         self::assertSame(JsonFixture::string($expected, 'proofMessageUtf8'), $message);
         self::assertSame(JsonFixture::string($expected, 'challengeHashHex'), hash('sha256', JsonFixture::string($result, 'challenge')));

@@ -8,7 +8,7 @@ namespace Anis\Partners\Models;
 final readonly class MaskedCardSubcategory implements \JsonSerializable
 {
     use WireJsonSerialization;
-    /** Keeps these public partner values stable after construction. */
+
     public function __construct(public string $id, public ?LocalizedText $name = null) {}
 
     /**

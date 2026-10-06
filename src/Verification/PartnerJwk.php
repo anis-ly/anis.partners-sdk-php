@@ -9,7 +9,7 @@ final readonly class PartnerJwk
 {
     /**
      * Preserves optional JOSE fields while keeping the public key data immutable.
-     * Keeps these public partner values stable after construction.
+     *
      */
     public function __construct(
         public ?string $kty = null,
@@ -19,20 +19,26 @@ final readonly class PartnerJwk
         public ?string $kid = null,
         public ?string $use = null,
         public ?string $alg = null,
-        public ?string $d = null,
-    ) {}
+        #[\SensitiveParameter]
+        ?string $d = null,
+    ) {
+        $this->hasPrivateMember = $d !== null && $d !== '';
+    }
+
+    /** Indicates that the source document contained private key material without retaining it. */
+    public bool $hasPrivateMember;
 
     /**
      * Reads a JSON key object and refuses field types that cannot represent a JOSE string.
      * @param array<array-key, mixed> $value
      */
-    public static function fromArray(array $value): self
+    public static function fromArray(#[\SensitiveParameter] array $value): self
     {
         $strings = [];
         foreach (['kty', 'crv', 'x', 'y', 'kid', 'use', 'alg', 'd'] as $member) {
             $item = $value[$member] ?? null;
             if ($item !== null && !is_string($item)) {
-                throw new \UnexpectedValueException('A signing-key member has an invalid type.');
+                throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('A signing-key member has an invalid type.');
             }
             $strings[$member] = $item;
         }
@@ -47,7 +53,7 @@ final readonly class PartnerJwk
     public function toArray(): array
     {
         $values = [];
-        foreach (['kty', 'crv', 'x', 'y', 'kid', 'use', 'alg', 'd'] as $member) {
+        foreach (['kty', 'crv', 'x', 'y', 'kid', 'use', 'alg'] as $member) {
             $value = $this->{$member};
             if ($value !== null) {
                 $values[$member] = $value;

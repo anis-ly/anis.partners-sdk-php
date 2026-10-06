@@ -8,10 +8,10 @@ namespace Anis\Partners\Internal;
 final class Uuid
 {
     /** Normalizes accepted UUID forms once so key identifiers have one stable wire spelling. */
-    public static function canonical(string $value): string
+    public static function canonical(string $value, string $what = 'key id'): string
     {
         if (preg_match('/\A(?:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}|[0-9a-f]{32})\z/iD', $value) !== 1) {
-            throw new \InvalidArgumentException('The key id must be a UUID.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The ' . $what . ' must be a UUID.');
         }
         $compact = str_replace('-', '', strtolower($value));
 

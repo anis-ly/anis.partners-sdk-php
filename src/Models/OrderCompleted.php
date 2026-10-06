@@ -12,7 +12,7 @@ final readonly class OrderCompleted extends OrderResult
     public bool $codesWithheld;
 
     /** Carries released credentials only on first completion so a replay cannot expose them twice. */
-    public function __construct(public Order $order)
+    public function __construct(#[\SensitiveParameter] public Order $order)
     {
         parent::__construct($order->operationId);
         $this->credentials = $order->soldCards ?? [];

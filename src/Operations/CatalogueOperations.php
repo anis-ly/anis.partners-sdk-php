@@ -20,9 +20,13 @@ final class CatalogueOperations extends AbstractOperations
     public function listCategories(string $walletId): \Generator
     {
         $cursor = null;
+        $seenCursors = [];
         do {
             $page = $this->listCategoriesPage($walletId, $cursor);
-            yield from $page->items;
+            foreach ($page->items as $item) {
+                yield $item;
+            }
+            $this->ensureCursorProgress($page->nextCursor, $seenCursors);
             $cursor = $page->nextCursor;
         } while ($cursor !== null && $cursor !== '');
     }
@@ -31,7 +35,7 @@ final class CatalogueOperations extends AbstractOperations
     /** @return Page<CatalogueCategory> */
     public function listCategoriesPage(string $walletId, ?string $cursor = null): Page
     {
-        $path = 'v1/wallets/' . Uuid::canonical($walletId) . '/catalog/categories';
+        $path = 'v1/wallets/' . Uuid::canonical($walletId, 'wallet id') . '/catalog/categories';
         return $this->fetchPage($this->transport, '/v1/wallets/{walletId}/catalog/categories', $this->cursor($path, $cursor), [CatalogueCategory::class, 'fromArray']);
     }
 
@@ -39,9 +43,13 @@ final class CatalogueOperations extends AbstractOperations
     public function listSubcategories(string $walletId, string $categoryId): \Generator
     {
         $cursor = null;
+        $seenCursors = [];
         do {
             $page = $this->listSubcategoriesPage($walletId, $categoryId, $cursor);
-            yield from $page->items;
+            foreach ($page->items as $item) {
+                yield $item;
+            }
+            $this->ensureCursorProgress($page->nextCursor, $seenCursors);
             $cursor = $page->nextCursor;
         } while ($cursor !== null && $cursor !== '');
     }
@@ -50,25 +58,29 @@ final class CatalogueOperations extends AbstractOperations
     /** @return Page<CatalogueSubcategory> */
     public function listSubcategoriesPage(string $walletId, string $categoryId, ?string $cursor = null): Page
     {
-        $path = 'v1/wallets/' . Uuid::canonical($walletId) . '/catalog/categories/' . Uuid::canonical($categoryId) . '/subcategories';
+        $path = 'v1/wallets/' . Uuid::canonical($walletId, 'wallet id') . '/catalog/categories/' . Uuid::canonical($categoryId, 'category id') . '/subcategories';
         return $this->fetchPage($this->transport, '/v1/wallets/{walletId}/catalog/categories/{categoryId}/subcategories', $this->cursor($path, $cursor), [CatalogueSubcategory::class, 'fromArray']);
     }
 
     /** Reads one subcategory detail. */
     public function getSubcategory(string $walletId, string $subcategoryId): CatalogueSubcategory
     {
-        $id = Uuid::canonical($subcategoryId);
+        $id = Uuid::canonical($subcategoryId, 'subcategory id');
         /** @var CatalogueSubcategory */
-        return $this->fetchModel($this->transport, '/v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}', 'v1/wallets/' . Uuid::canonical($walletId) . '/catalog/subcategories/' . $id, [CatalogueSubcategory::class, 'fromArray']);
+        return $this->fetchModel($this->transport, '/v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}', 'v1/wallets/' . Uuid::canonical($walletId, 'wallet id') . '/catalog/subcategories/' . $id, [CatalogueSubcategory::class, 'fromArray']);
     }
 
     /** Walks all card pages, returning the price shown for this wallet. @return \Generator<int, CatalogueCard> */
     public function listCards(string $walletId, string $subcategoryId): \Generator
     {
         $cursor = null;
+        $seenCursors = [];
         do {
             $page = $this->listCardsPage($walletId, $subcategoryId, $cursor);
-            yield from $page->items;
+            foreach ($page->items as $item) {
+                yield $item;
+            }
+            $this->ensureCursorProgress($page->nextCursor, $seenCursors);
             $cursor = $page->nextCursor;
         } while ($cursor !== null && $cursor !== '');
     }
@@ -77,7 +89,7 @@ final class CatalogueOperations extends AbstractOperations
     /** @return Page<CatalogueCard> */
     public function listCardsPage(string $walletId, string $subcategoryId, ?string $cursor = null): Page
     {
-        $path = 'v1/wallets/' . Uuid::canonical($walletId) . '/catalog/subcategories/' . Uuid::canonical($subcategoryId) . '/cards';
+        $path = 'v1/wallets/' . Uuid::canonical($walletId, 'wallet id') . '/catalog/subcategories/' . Uuid::canonical($subcategoryId, 'subcategory id') . '/cards';
         return $this->fetchPage($this->transport, '/v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}/cards', $this->cursor($path, $cursor), [CatalogueCard::class, 'fromArray']);
     }
 }

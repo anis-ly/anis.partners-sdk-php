@@ -19,15 +19,15 @@ final readonly class SigningKeySet
         try {
             $document = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         } catch (\JsonException $error) {
-            throw new \UnexpectedValueException('The signing-key document is not valid JSON.', 0, $error);
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('The signing-key document is not valid JSON.', 0, $error);
         }
         if (!is_array($document) || !is_array($document['keys'] ?? null)) {
-            throw new \UnexpectedValueException('The signing-key document has no keys array.');
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('The signing-key document has no keys array.');
         }
         $keys = [];
         foreach ($document['keys'] as $key) {
             if (!is_array($key)) {
-                throw new \UnexpectedValueException('A signing-key entry is not an object.');
+                throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('A signing-key entry is not an object.');
             }
             $keys[] = PartnerJwk::fromArray($key);
         }

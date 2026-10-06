@@ -16,16 +16,27 @@ final class PemP256Signer implements P256Signer
         $ec = is_array($details) ? ($details['ec'] ?? null) : null;
         if (!is_array($details) || ($details['type'] ?? null) !== OPENSSL_KEYTYPE_EC
             || !is_array($ec) || ($ec['curve_name'] ?? null) !== 'prime256v1') {
-            throw new \InvalidArgumentException('The Anis Partner API accepts NIST P-256 keys only; other curves cannot verify.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The Anis Partner API accepts NIST P-256 keys only; other curves cannot verify.');
         }
     }
 
     /** Loads a private key and refuses unsupported curves before any request is prepared. */
-    public static function fromPem(string $pem): self
+    public static function fromPem(#[\SensitiveParameter] string $pem): self
     {
+        $pem = trim($pem);
+        if (str_starts_with($pem, "\xEF\xBB\xBF")) {
+            $pem = ltrim(substr($pem, 3));
+        }
+        if (!str_starts_with($pem, '-----BEGIN ')) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The private key must be PEM text, not a path or URI.');
+        }
+        if (str_contains($pem, 'ENCRYPTED PRIVATE KEY') || str_contains($pem, 'Proc-Type: 4,ENCRYPTED')) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Encrypted PEM private keys are not supported.');
+        }
         $key = openssl_pkey_get_private($pem);
         if ($key === false) {
-            throw new \InvalidArgumentException('The PEM does not contain a readable EC private key.');
+            self::clearOpenSslErrors();
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The PEM does not contain a readable EC private key.');
         }
 
         return new self($key);
@@ -34,25 +45,28 @@ final class PemP256Signer implements P256Signer
     /** Loads a PEM private key from disk and applies the same P-256 check as fromPem(). */
     public static function fromPemFile(string $path): self
     {
-        $pem = file_get_contents($path);
+        if (str_contains($path, '://') || !is_file($path) || !is_readable($path)) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The private key file could not be read.');
+        }
+        $pem = @file_get_contents($path);
         if ($pem === false) {
-            throw new \InvalidArgumentException('The private key file could not be read.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('The private key file could not be read.');
         }
 
         return self::fromPem($pem);
     }
 
     /** Signs exact base bytes with SHA-256 and returns the required 64-byte P1363 form. */
-    public function sign(string $data): string
+    public function sign(#[\SensitiveParameter] string $data): string
     {
         $signature = '';
         if (!openssl_sign($data, $signature, $this->key, OPENSSL_ALGO_SHA256)) {
             self::clearOpenSslErrors();
-            throw new \RuntimeException('OpenSSL could not sign the request.');
+            throw new \Anis\Partners\Errors\AnisPartnersRuntimeException('OpenSSL could not sign the request.');
         }
 
         if (!is_string($signature)) {
-            throw new \RuntimeException('OpenSSL returned an invalid signature value.');
+            throw new \Anis\Partners\Errors\AnisPartnersRuntimeException('OpenSSL returned an invalid signature value.');
         }
 
         return EcdsaSignatureFormat::derToP1363($signature);
@@ -64,7 +78,7 @@ final class PemP256Signer implements P256Signer
         $details = openssl_pkey_get_details($this->key);
         $ec = $details['ec'] ?? null;
         if (!is_array($ec) || !isset($ec['x'], $ec['y']) || !is_string($ec['x']) || !is_string($ec['y'])) {
-            throw new \RuntimeException('OpenSSL did not expose the P-256 public coordinates.');
+            throw new \Anis\Partners\Errors\AnisPartnersRuntimeException('OpenSSL did not expose the P-256 public coordinates.');
         }
 
         return new PartnerJwk(

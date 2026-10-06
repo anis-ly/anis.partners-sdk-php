@@ -9,7 +9,7 @@ final readonly class SignedRequestHeaders
 {
     /**
      * Keeps wire headers and the signed base available as one immutable signing result.
-     * Keeps these public partner values stable after construction.
+     *
      */
     public function __construct(
         public string $signatureInput,

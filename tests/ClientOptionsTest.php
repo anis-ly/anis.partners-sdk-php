@@ -21,18 +21,20 @@ final class ClientOptionsTest extends TestCase
         self::assertSame(AcceptLanguage::Arabic, $options->acceptLanguage);
         self::assertSame('ar', $options->acceptLanguageHeader());
         self::assertSame(90, $options->signingKeyCacheSeconds);
+        self::assertSame('default', $options->name);
     }
 
     #[Test]
     public function it_uses_safe_defaults_and_allows_explicit_settings_to_override_them(): void
     {
         $defaults = ClientOptions::fromArray(['authority' => 'https://partners.example']);
-        $adjusted = ClientOptions::fromArray(['authority' => 'http://localhost:8000', 'signatureLifetimeSeconds' => 1, 'acceptLanguage' => 'English']);
+        $adjusted = ClientOptions::fromArray(['authority' => 'http://localhost:8000', 'signatureLifetimeSeconds' => 1, 'acceptLanguage' => 'English', 'name' => 'orders-worker']);
 
         self::assertSame(60, $defaults->signatureLifetimeSeconds);
         self::assertSame(600, $defaults->signingKeyCacheSeconds);
         self::assertNull($defaults->acceptLanguageHeader());
         self::assertSame('en', $adjusted->acceptLanguageHeader());
+        self::assertSame('orders-worker', $adjusted->name);
     }
 
     #[Test]
@@ -60,6 +62,22 @@ final class ClientOptionsTest extends TestCase
 
         self::assertSame('http://localhost:8000', (new ClientOptions('http://localhost:8000'))->authority);
         self::assertSame('http://[::1]:8000', (new ClientOptions('http://[::1]:8000'))->authority);
+    }
+
+    #[Test]
+    public function it_refuses_an_authority_with_port_zero(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('valid port from 1 through 65535');
+        new ClientOptions('https://partners.example:0');
+    }
+
+    #[Test]
+    public function it_refuses_settings_that_the_php_client_cannot_apply(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('ClientOptions::fromArray does not support setting $timeout');
+        ClientOptions::fromArray(['authority' => 'https://partners.example', 'timeout' => 30]);
     }
 
     #[Test]

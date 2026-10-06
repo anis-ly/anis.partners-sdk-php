@@ -24,7 +24,7 @@ final readonly class Page implements \JsonSerializable
     {
         $items = $data['items'] ?? [];
         if (!is_array($items) || !array_is_list($items)) {
-            throw new \UnexpectedValueException('The page items member must be a list.');
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('The page items member must be a list.');
         }
 
         return new self($items, ModelData::nullableString($data, 'nextCursor'));

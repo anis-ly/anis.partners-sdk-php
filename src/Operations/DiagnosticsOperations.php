@@ -18,6 +18,10 @@ final class DiagnosticsOperations extends AbstractOperations
     public function checkSignature(): SignatureDiagnostic
     {
         $response = $this->transport->request('POST', '/v1/diagnostics/signature', 'v1/diagnostics/signature', SignatureProfile::BodylessNonceMutation, ContentDigest::EMPTY_OBJECT);
-        return SignatureDiagnostic::fromArray($response->json);
+        try {
+            return SignatureDiagnostic::fromArray($response->json);
+        } catch (\Throwable) {
+            throw new \Anis\Partners\Errors\MalformedResponseException('The verified diagnostic answer does not match the diagnostic model.');
+        }
     }
 }

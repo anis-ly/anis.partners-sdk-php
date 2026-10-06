@@ -12,18 +12,28 @@ final readonly class RevealedCredentialCollection implements \JsonSerializable
      * Keeps one invoice reveal's credentials together so they cannot be confused with another sale.
      * @param list<RevealedCredential> $items
      */
-    public function __construct(public array $items = []) {}
+    public function __construct(#[\SensitiveParameter] public array $items = []) {}
 
     /**
      * Reads the invoice result as credential models instead of untyped nested arrays.
      * @param array<array-key, mixed> $data
      */
-    public static function fromArray(array $data): self
+    public static function fromArray(#[\SensitiveParameter] array $data): self
     {
-        return new self(array_map(
-            static fn(array $item): RevealedCredential => RevealedCredential::fromArray($item),
-            ModelData::objectList($data, 'items'),
-        ));
+        return new self(self::credentials(ModelData::objectList($data, 'items')));
+    }
+
+    /** @param list<array<array-key, mixed>> $items
+     *  @return list<RevealedCredential>
+     */
+    private static function credentials(#[\SensitiveParameter] array $items): array
+    {
+        $credentials = [];
+        foreach ($items as $item) {
+            $credentials[] = RevealedCredential::fromArray($item);
+        }
+
+        return $credentials;
     }
 
     /** Redacts credentials nested in the invoice result from native object inspection. */

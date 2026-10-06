@@ -15,11 +15,14 @@ use Anis\Partners\Models\CreateOrderRequest;
 use Anis\Partners\Models\EnrollmentKeyRequest;
 use Anis\Partners\Models\MaskedCard;
 use Anis\Partners\Models\Money;
+use Anis\Partners\Models\Order;
 use Anis\Partners\Models\OrderCompleted;
 use Anis\Partners\Models\OrderNotPlaced;
 use Anis\Partners\Models\OrderOutcomeUnknown;
 use Anis\Partners\Models\OrderProcessing;
 use Anis\Partners\Models\OrderReplayed;
+use Anis\Partners\Models\OrderResult;
+use Anis\Partners\Models\OrderStatus;
 use Anis\Partners\Models\RevealedCredential;
 use Anis\Partners\Models\Wallet;
 use Anis\Partners\Signing\PemP256Signer;
@@ -84,7 +87,12 @@ final class OrderJournal
         }
         $path = $this->path($operationId);
         $json = json_encode(['operationId' => $operationId, 'walletId' => $walletId, 'request' => $request->toArray()], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $file = fopen($path, 'x');
+        $oldMask = umask(0077);
+        try {
+            $file = fopen($path, 'x');
+        } finally {
+            umask($oldMask);
+        }
         if ($file === false) {
             throw new RuntimeException('This operation id already has a recorded intent; resume it instead of replacing it.');
         }
@@ -94,7 +102,55 @@ final class OrderJournal
             throw new RuntimeException('Could not persist the order intent.');
         }
         fclose($file);
-        chmod($path, 0600);
+    }
+
+    /** Stores outcomes and newly released credentials with owner-only file permissions. */
+    public function recordOutcome(string $operationId, mixed $outcome): void
+    {
+        $path = $this->path($operationId);
+        $contents = file_get_contents($path);
+        if ($contents === false) {
+            throw new RuntimeException('No recorded intent for that operation id.');
+        }
+        $record = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($record)) {
+            throw new RuntimeException('The recorded order intent is incomplete.');
+        }
+        if ($outcome instanceof OrderCompleted) {
+            $record['outcome'] = $outcome->codesWithheld ? 'completed_withheld' : 'completed';
+            if ($outcome->credentials !== []) {
+                $record['credentials'] = array_map(static fn(RevealedCredential $credential): array => $credential->jsonSerialize(), $outcome->credentials);
+            }
+        } elseif ($outcome instanceof OrderReplayed) {
+            $record['outcome'] = 'replayed';
+        } elseif ($outcome instanceof OrderProcessing) {
+            $record['outcome'] = 'processing';
+        } elseif ($outcome instanceof OrderNotPlaced) {
+            $record['outcome'] = 'not_placed';
+        } elseif ($outcome instanceof OrderOutcomeUnknown) {
+            $record['outcome'] = 'unknown';
+        }
+        $temporary = $path . '.' . bin2hex(random_bytes(6)) . '.tmp';
+        $oldMask = umask(0077);
+        try {
+            $file = fopen($temporary, 'x');
+        } finally {
+            umask($oldMask);
+        }
+        if ($file === false) {
+            throw new RuntimeException('Could not prepare the order journal update.');
+        }
+        $json = json_encode($record, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if (fwrite($file, $json) !== strlen($json)) {
+            fclose($file);
+            unlink($temporary);
+            throw new RuntimeException('Could not persist the order outcome.');
+        }
+        fclose($file);
+        if (!rename($temporary, $path)) {
+            unlink($temporary);
+            throw new RuntimeException('Could not replace the order journal.');
+        }
     }
 
     /** Reads a previously recorded intent for safe resumption.
@@ -124,6 +180,31 @@ final class OrderJournal
     {
         return rtrim($this->folder, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $operationId . '.json';
     }
+}
+
+/** Sends only after the intent is durably recorded, so a lost answer can be resumed with the same operation id.
+ * @param \Closure(string, string, CreateOrderRequest): OrderResult $send
+ */
+function sendJournaledOrder(OrderJournal $journal, string $operationId, string $walletId, CreateOrderRequest $request, \Closure $send): OrderResult
+{
+    $journal->save($operationId, $walletId, $request);
+    printf("operation %s persisted before request\n", $operationId);
+    $outcome = $send($walletId, $operationId, $request);
+    $journal->recordOutcome($operationId, $outcome);
+
+    return $outcome;
+}
+
+/** Resumes from the journal's original operation id and request instead of accepting replacement values.
+ * @param \Closure(string, string, CreateOrderRequest): OrderResult $resume
+ */
+function resumeJournaledOrder(OrderJournal $journal, string $operationId, \Closure $resume): OrderResult
+{
+    $intent = $journal->read($operationId);
+    $outcome = $resume($intent['walletId'], $intent['operationId'], CreateOrderRequest::fromArray($intent['request']));
+    $journal->recordOutcome($intent['operationId'], $outcome);
+
+    return $outcome;
 }
 
 /**
@@ -206,7 +287,12 @@ function argument(array $positionals, int $index, string $label): string
 /** Persists a generated enrollment key before sending its public half to Anis. */
 function persistEnrollmentKeyFile(string $path, string $pem): void
 {
-    $file = fopen($path, 'x');
+    $oldMask = umask(0077);
+    try {
+        $file = fopen($path, 'x');
+    } finally {
+        umask($oldMask);
+    }
     if ($file === false) {
         throw new RuntimeException('Could not create the private key file; choose a new path.');
     }
@@ -237,10 +323,14 @@ function decimalAmount(string $amount): string
 function show(mixed $value): void
 {
     if ($value instanceof OrderCompleted) {
-        printf("COMPLETED operation=%s credentials=%d withheld=%s\n", $value->operationId, count($value->credentials), $value->codesWithheld ? 'yes' : 'no');
+        printf($value->codesWithheld ? "COMPLETED — CODES WITHHELD operation=%s\n" : "COMPLETED operation=%s credentials=%d\n", ...($value->codesWithheld ? [$value->operationId] : [$value->operationId, count($value->credentials)]));
         return;
     }
     if ($value instanceof OrderProcessing) {
+        if ($value->order->status === OrderStatus::RecoveryExhausted) {
+            printf("RECOVERY EXHAUSTED operation=%s; keep the same id and contact support@anis.ly.\n", $value->operationId);
+            return;
+        }
         printf("PROCESSING operation=%s resume_after=%ds\n", $value->operationId, $value->retryAfterSeconds);
         return;
     }
@@ -250,6 +340,10 @@ function show(mixed $value): void
     }
     if ($value instanceof OrderNotPlaced) {
         printf("NOT PLACED operation=%s code=%s\n", $value->operationId, $value->refusal->errorCode->value);
+        return;
+    }
+    if ($value instanceof Order && $value->status === OrderStatus::RecoveryExhausted) {
+        printf("RECOVERY EXHAUSTED operation=%s; keep the same id and contact support@anis.ly.\n", $value->operationId);
         return;
     }
     if ($value instanceof OrderOutcomeUnknown) {
@@ -282,8 +376,8 @@ function usage(): void
     echo <<<'HELP'
 Anis Partner SDK sample
 
-  enrol --invitation <uuid> --token <token> [--key-file <path>] [--days 365]
-  enrol-status --invitation <uuid> --token <token>
+  enrol --invitation <uuid> [--key-file <path>] [--days 365]
+  enrol-status --invitation <uuid]
   tour | profile | wallets | wallet <wallet>
   categories <wallet> | subcategories <wallet> <category>
   subcategory <wallet> <subcategory> | cards <wallet> <subcategory>
@@ -318,16 +412,16 @@ function main(array $argv): int
     }
     $dryRun = isset($flags['dry-run']) || getenv('SAMPLE_DRY_RUN') === '1';
     $preview = isset($flags['preview']);
-    $http = new SampleWire(new Client(), $dryRun, $preview);
+    $http = new SampleWire(new Client(['timeout' => 15, 'allow_redirects' => false]), $dryRun, $preview);
     $logger = isset($flags['verbose']) ? new SampleLogger() : null;
     $requestFactory = Psr17FactoryDiscovery::findRequestFactory();
     $streamFactory = Psr17FactoryDiscovery::findStreamFactory();
 
     if ($command === 'enrol' || $command === 'enrol-status') {
         $invitation = (string) ($flags['invitation'] ?? throw new InvalidArgumentException('--invitation <uuid> is required.'));
-        $tokenValue = $flags['token'] ?? null;
-        if (!is_string($tokenValue)) {
-            throw new InvalidArgumentException('--token <token> is required.');
+        $tokenValue = getenv('SAMPLE_ENROLLMENT_TOKEN');
+        if (!is_string($tokenValue) || $tokenValue === '') {
+            throw new InvalidArgumentException('Set SAMPLE_ENROLLMENT_TOKEN for the one-use enrollment token.');
         }
         $token = $tokenValue;
         $enrollment = EnrollmentClient::create($authority, $invitation, $token, $http, $requestFactory, $streamFactory, logger: $logger);
@@ -358,6 +452,9 @@ function main(array $argv): int
         $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
         $result = $enrollment->submitKey(new EnrollmentKeyRequest($signer->publicJwk(), $now, $now->modify('+' . $days . ' days')));
         $status = $enrollment->prove($result, $signer);
+        if ($status->proofState !== 'accepted') {
+            throw new RuntimeException('Anis did not accept the key proof; stop enrollment and contact Anis staff.');
+        }
         printf("key id %s\nsafety code %s — Anis staff will call your technical contact to verify it.\nproof state %s\n", $result->keyId, $result->safetyCode ?? '', $status->proofState ?? 'unknown');
         return 0;
     }
@@ -411,9 +508,8 @@ function main(array $argv): int
         case 'order-status': show($client->orders()->get(argument($args, 0, 'operation id')));
             break;
         case 'resume':
-            $intent = $journal->read(argument($args, 0, 'operation id'));
-            $request = CreateOrderRequest::fromArray($intent['request']);
-            show($client->orders()->resume($intent['walletId'], $intent['operationId'], $request));
+            $outcome = resumeJournaledOrder($journal, argument($args, 0, 'operation id'), static fn(string $walletId, string $operationId, CreateOrderRequest $request): OrderResult => $client->orders()->resume($walletId, $operationId, $request));
+            show($outcome);
             break;
         case 'order':
             $walletId = argument($args, 0, 'wallet id');
@@ -445,9 +541,8 @@ function main(array $argv): int
             }
             $request = new CreateOrderRequest($card->id, $quantity, $unitPrice, $unitPrice->multiply($quantity), is_string($flags['reference'] ?? null) ? $flags['reference'] : null, isset($flags['use-allowed-debt']));
             $operationId = is_string($flags['operation'] ?? null) ? $flags['operation'] : newOperationId();
-            $journal->save($operationId, $walletId, $request);
-            printf("operation %s persisted before request\n", $operationId);
-            show($client->orders()->create($walletId, $operationId, $request));
+            $outcome = sendJournaledOrder($journal, $operationId, $walletId, $request, static fn(string $walletId, string $operationId, CreateOrderRequest $request): OrderResult => $client->orders()->create($walletId, $operationId, $request));
+            show($outcome);
             break;
         case 'tour':
             show($client->profile()->get());
@@ -509,7 +604,7 @@ function maskSecret(?string $secret): ?string
         return null;
     }
 
-    return strlen($secret) < 5 ? '****' : substr($secret, 0, 2) . str_repeat('*', strlen($secret) - 4) . substr($secret, -2);
+    return strlen($secret) < 5 ? '****' : (strlen($secret) <= 8 ? '****' . substr($secret, -2) : substr($secret, 0, 2) . str_repeat('*', strlen($secret) - 4) . substr($secret, -2));
 }
 
 /** Hides proof signatures and private JWK members if a dry-run body contains any. */

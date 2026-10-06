@@ -16,7 +16,7 @@ final class SafetyCode
     {
         $digest = Base64Url::decode($thumbprint);
         if ($digest === null || strlen($digest) !== 32) {
-            throw new \InvalidArgumentException('A thumbprint must be the base64url encoding of 32 bytes.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('A thumbprint must be the base64url encoding of 32 bytes.');
         }
         $code = '';
         $buffer = 0;
@@ -40,7 +40,7 @@ final class SafetyCode
      */
     public static function matches(?string $entered, string $thumbprint): bool
     {
-        $raw = trim($entered ?? '');
+        $raw = preg_replace('/^\s+|\s+$/u', '', $entered ?? '') ?? '';
         $candidate = strtoupper(str_replace([' ', '-'], '', $raw));
         $candidate = strtr($candidate, ['O' => '0', 'I' => '1', 'L' => '1']);
         $expectedCode = str_replace('-', '', self::fromThumbprint($thumbprint));

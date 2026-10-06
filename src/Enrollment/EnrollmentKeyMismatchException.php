@@ -7,7 +7,7 @@ namespace Anis\Partners\Enrollment;
 use Anis\Partners\AnisPartnersException;
 
 /** Stops enrollment when Anis reports a different public key than the one submitted. */
-final class EnrollmentKeyMismatchException extends \RuntimeException implements AnisPartnersException
+final class EnrollmentKeyMismatchException extends \Anis\Partners\Errors\AnisPartnersRuntimeException implements AnisPartnersException
 {
     /** Preserves the two fingerprints for local diagnosis without allowing proof on an untrusted challenge. */
     public function __construct(public readonly string $localThumbprint, public readonly ?string $serverThumbprint)

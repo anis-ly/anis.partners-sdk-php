@@ -14,8 +14,10 @@ final class FakeHttpClient implements ClientInterface
     public int $calls = 0;
     public ?RequestInterface $lastRequest = null;
     public ?\Throwable $failure = null;
+    /** @var array<string, string|list<string>> */
+    public array $headers = [];
 
-    public function __construct(public string $body = '{"keys":[]}') {}
+    public function __construct(public string $body = '{"keys":[]}', public int $status = 200) {}
 
     public function sendRequest(RequestInterface $request): ResponseInterface
     {
@@ -25,6 +27,6 @@ final class FakeHttpClient implements ClientInterface
             throw $this->failure;
         }
 
-        return new Response(200, [], $this->body);
+        return new Response($this->status, $this->headers, $this->body);
     }
 }

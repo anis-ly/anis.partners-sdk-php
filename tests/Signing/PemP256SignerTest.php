@@ -24,6 +24,14 @@ final class PemP256SignerTest extends TestCase
     }
 
     #[Test]
+    public function it_accepts_whitespace_and_a_utf8_bom_before_pem_text(): void
+    {
+        [$pem] = self::key('prime256v1');
+
+        self::assertSame(64, strlen(PemP256Signer::fromPem(" \n\xEF\xBB\xBF" . $pem . " \n")->sign('data')));
+    }
+
+    #[Test]
     public function it_refuses_a_p384_key_when_loading(): void
     {
         [$pem] = self::key('secp384r1');

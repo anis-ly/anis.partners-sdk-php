@@ -16,8 +16,11 @@ final readonly class VerifiableResponse
      */
     public function __construct(
         public int $status,
+        #[\SensitiveParameter]
         array $headers,
+        #[\SensitiveParameter]
         public string $body,
+        #[\SensitiveParameter]
         public ?string $requestSignatureInput,
     ) {
         $normalized = [];
@@ -31,5 +34,15 @@ final readonly class VerifiableResponse
     public function header(string $name): ?string
     {
         return $this->headers[strtolower($name)] ?? null;
+    }
+
+    /** Omits raw response bytes from native diagnostic output. */
+    public function __debugInfo(): array
+    {
+        return [
+            'status' => $this->status,
+            'headers' => $this->headers,
+            'requestSignatureInput' => $this->requestSignatureInput,
+        ];
     }
 }

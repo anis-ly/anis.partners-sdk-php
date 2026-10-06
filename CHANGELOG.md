@@ -1,9 +1,19 @@
 # Changelog
 
-All notable changes to `anis-ly/partners` are documented here.
+All notable changes to this project are documented here.
 
-## [1.0.0] - Unreleased
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-First PHP release, at parity with .NET `Anis.Partners` 1.3.0: signed P-256 requests with content digests, verified
-responses, all partner routes, enrollment and safety-code support, typed refusals, durable order recovery outcomes,
-structured logs, OpenTelemetry traces and metrics, and PHP 8.2–8.5 support.
+## [1.0.0] - 2026-10-06
+
+### Added
+
+- Signed P-256 partner requests and verified Anis responses.
+- Typed operations for profile, wallets, catalogue, orders, owned cards, diagnostics, and credential enrolment.
+- Durable order recovery outcomes and explicit resume guidance.
+- Structured PSR-3 logs and OpenTelemetry traces and metrics.
+- PHP 8.2 support with PSR HTTP interfaces.
+
+### Changed
+
+- Partners can use an installed PSR-18 client and PSR-17 factories discovered by the package.

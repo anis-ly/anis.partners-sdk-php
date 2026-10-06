@@ -13,17 +13,20 @@ composer install
 php samples/console/anis-sample.php help
 ```
 
+The sample writes each order intent before the call, then journals its outcome and any released credentials in an owner-only (`0600`) file. Replays leave stored credentials untouched; unknown outcomes keep prior credentials; `resume` loads the operation id from that journal. A completion with withheld codes and a recovery-exhausted status print distinct messages. Use `order --preview` to inspect the order flow while still writing the intent before its held request.
+
 The sample reads `settings.json` from the current directory or this folder. Values can be overridden with:
 
 ```bash
 export ANIS_PARTNERS_AUTHORITY=https://partners.example
 export SAMPLE_KEY_FILE=/secure/partner-key.pem
 export SAMPLE_KEY_ID=3f2a9c14-8d6e-4b21-9f07-5c8ab2d61e43
+export SAMPLE_ENROLLMENT_TOKEN=your-one-use-token
 export SAMPLE_ORDERS_FOLDER=/secure/partner-orders
 ```
 
 `settings.json` may hold `AnisPartners.authority`, `Sample.keyFile`, `Sample.keyId`, and `Sample.ordersFolder`.
-Enrollment accepts `--invitation`, `--token`, optional `--key-file`, and `--days`. It saves a new P-256 private key
+Enrollment accepts `--invitation`, optional `--key-file`, and `--days`; set `SAMPLE_ENROLLMENT_TOKEN` in the environment instead of placing the one-use token on the command line. It saves a new P-256 private key
 with owner-only permissions before submitting the public key. `enrol --dry-run` generates an in-memory key and does
 not create or modify the key file; `--preview` also keeps the key in memory because it holds the first mutation.
 Keep the printed safety code for the phone call with Anis staff.
@@ -41,7 +44,7 @@ and body; proof signatures and private JWK members in a JSON body are redacted, 
 values, signature bases, or private keys. It holds the first request so no request limit, nonce, or money is spent.
 Add `--preview` to send reads and hold the first request that changes something. Credentials
 are masked in terminal output unless `--show-secrets` is explicitly supplied. Add `--verbose` to print the SDK's
-structured debug and information logs. A regular run uses Guzzle through the SDK's PSR-18 client interface.
+structured debug and information logs. A regular run uses Guzzle configured with a 15-second timeout and redirects disabled through the SDK's PSR-18 client interface.
 
 An order's `OrderOutcomeUnknown` means resume the same operation id and request. `OrderCompleted` credentials should
 be stored in protected custody; the sample reports only their count after an order and masks reveal values by default.
