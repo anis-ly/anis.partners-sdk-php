@@ -138,6 +138,59 @@ final class ContractDriftTest extends TestCase
     }
 
     #[Test]
+    public function it_verifies_the_answers_of_exactly_the_routes_anis_signs(): void
+    {
+        // The gateway's catalogue (PartnerRoute.SignsResponse) is the authority; its answers on these routes are signed.
+        $signed = [
+            'POST /v1/wallets/{walletId}/orders',
+            'GET /v1/orders/{operationId}',
+            'POST /v1/wallets/{walletId}/cards/{soldCardId}/reveal',
+            'POST /v1/wallets/{walletId}/invoices/{invoiceId}/cards/reveal',
+            'GET /v1/enrollments/{invitationId}',
+            'POST /v1/enrollments/{invitationId}/keys',
+            'POST /v1/enrollments/{invitationId}/proof',
+            'GET /v1/enrollments/{invitationId}/status',
+            'POST /v1/diagnostics/signature',
+        ];
+        $unsigned = [
+            'GET /v1/profile',
+            'GET /v1/wallets',
+            'GET /v1/wallets/{walletId}',
+            'GET /v1/wallets/{walletId}/catalog/categories',
+            'GET /v1/wallets/{walletId}/catalog/categories/{categoryId}/subcategories',
+            'GET /v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}',
+            'GET /v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}/cards',
+            'GET /v1/wallets/{walletId}/cards',
+            'GET /v1/wallets/{walletId}/cards/{soldCardId}',
+            'GET /.well-known/partner-signing-keys.json',
+        ];
+        $sdkSigned = [];
+        $sdkUnsigned = [];
+        foreach (PartnerRoutes::all() as $route) {
+            $key = $route->method . ' ' . $route->template;
+            self::assertSame($route->signsResponse, PartnerRoutes::signsResponse($route->method, $route->template));
+            if ($route->signsResponse) {
+                $sdkSigned[] = $key;
+            } else {
+                $sdkUnsigned[] = $key;
+            }
+        }
+        sort($signed);
+        sort($unsigned);
+        sort($sdkSigned);
+        sort($sdkUnsigned);
+        self::assertSame($signed, $sdkSigned);
+        self::assertSame($unsigned, $sdkUnsigned);
+    }
+
+    #[Test]
+    public function it_verifies_the_answer_of_a_route_outside_the_catalogue(): void
+    {
+        self::assertTrue(PartnerRoutes::signsResponse('GET', '/v1/unknown'));
+        self::assertTrue(PartnerRoutes::signsResponse('POST', '/v1/profile'));
+    }
+
+    #[Test]
     public function it_knows_every_public_error_code_in_the_catalogue(): void
     {
         $codes = array_values(array_unique(self::publicCodes()));

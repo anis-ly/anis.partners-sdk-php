@@ -28,7 +28,7 @@ final readonly class ClientOptions
         $host = strtolower(trim($parts['host'], '[]'));
         $isLoopback = in_array($host, ['localhost', '127.0.0.1', '::1'], true);
         if ($scheme !== 'https' && !$isLoopback) {
-            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Anis partner connections require HTTPS because the unsigned signing-key document could otherwise be replaced in transit and card codes could be read. HTTP is allowed only for loopback testing.');
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Anis partner connections require HTTPS because the unsigned signing-key document and the unsigned information answers (profile, wallets, catalogue, owned-card lists) could otherwise be replaced in transit, and card codes could be read. HTTP is allowed only for loopback testing.');
         }
         if ($signatureLifetimeSeconds < 1 || $signatureLifetimeSeconds > 60) {
             throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('ClientOptions::$signatureLifetimeSeconds must be between 1 and 60 seconds. Anis would admit up to 300, but this SDK accepts answers only within 60 seconds: with a longer signature and a slow clock an order can complete and its answer — with the card codes — be discarded.');

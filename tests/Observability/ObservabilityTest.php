@@ -88,9 +88,10 @@ final class ObservabilityTest extends TestCase
             $wire->body = '{"state":"pendingApproval"}';
             $enrollment = EnrollmentClient::create('https://partners.example', '2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', 'known-enrollment-token', $wire, $factory, $factory, logger: $logger)->get();
             self::assertSame('pendingApproval', $enrollment->state);
+            $wire->body = '{"operationId":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34","status":"completed"}';
             $wire->tamperAfterSigning = true;
             try {
-                $client->profile()->get();
+                $client->orders()->get('9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34');
                 self::fail('A changed answer must not be returned.');
             } catch (UnverifiableResponseException $exception) {
                 $responseFailure = $exception->getMessage();

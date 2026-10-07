@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Anis\Partners\Operations;
 
-/** @internal Holds the verified status, headers, and decoded payload returned by transport. */
+/** @internal Holds the status, headers, and decoded payload returned by transport, verified first on a signed route. */
 final readonly class TransportResponse
 {
     /**

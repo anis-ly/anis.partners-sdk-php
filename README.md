@@ -1,7 +1,7 @@
 # Anis Partner SDK for PHP
 
-The PHP client for the Anis Partner API. It signs each request, verifies each response, and returns typed
-operations and order outcomes. Verified end to end against a live Anis environment (October 2026).
+The PHP client for the Anis Partner API. It signs every request, verifies every answer Anis signs — orders, card
+reveals, enrollment and the signature self-check — and returns typed operations and order outcomes. Verified end to end against a live Anis environment (October 2026).
 
 > **Disclaimer.** This SDK is an optional helper provided free of charge under the MIT License, "as is", without
 > warranty of any kind. Anis (Aniscom for Technical Services) accepts no responsibility or liability for its use or for
@@ -84,13 +84,14 @@ before moving money. Using Laravel? See [Using the SDK with Laravel](https://git
 - You provide and persist the order id; a new id after a timeout could make a second purchase.
 - Five explicit result types distinguish completed, processing, replayed, not placed, and unknown orders.
 - Credentials are available on the first completion only; later recovery uses the same id and never silently buys again.
-- An unverifiable response is discarded. Verification cannot be disabled.
+- On a route whose answers Anis signs (orders, reveals, enrollment, the signature self-check), an answer that is unsigned or fails verification is discarded — success and refusal alike. Verification cannot be disabled.
+- Information reads — profile, wallets, catalogue, and owned-card lists and details — are not signed by Anis, so the SDK returns them without verifying a signature; HTTPS protects them. They never fetch Anis's signing keys, so they keep working while those keys cannot be fetched. See [Routes and permissions](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/routes-and-permissions.md).
 - The private key stays behind `P256Signer`; the included PEM signer is for PEM files readable only by the application user, and a KMS/HSM signer can implement the same interface.
 
 ## Coverage and proof
 
 The client covers profile, wallet, catalogue, order, owned-card, reveal, diagnostic, enrollment, and response-key routes. Set timeouts and disable redirects on your PSR-18 HTTP client; signed partner requests must not be silently replayed to another location.
-Conformance tests use the published request, response, safety-code, and enrollment vectors. Contract tests compare route paths, signature kinds, public error codes, enrollment fields, and signature-component order with the checked-in contracts. The repository sample is excluded from Composer archives; clone the repository or copy the sample into your application and update its autoload path.
+Conformance tests use the published request, response, safety-code, and enrollment vectors. Contract tests compare route paths, signature kinds, which routes' answers are signed, public error codes, enrollment fields, and signature-component order with the checked-in contracts. The repository sample is excluded from Composer archives; clone the repository or copy the sample into your application and update its autoload path.
 
 Typed error cases are generated from `contracts/error-catalogue.json`. Run `php tools/generate-errors.php` from a repository clone when updating the generated enum; the generator is not included in Composer archives.
 

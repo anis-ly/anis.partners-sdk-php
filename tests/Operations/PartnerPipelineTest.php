@@ -83,7 +83,7 @@ final class PartnerPipelineTest extends TestCase
         $wire->responseHeaders['Location'] = 'https://other.invalid/redirected';
 
         try {
-            self::client($wire)->profile()->get();
+            self::client($wire)->orders()->get(self::OPERATION);
             self::fail('The 302 response should be surfaced as an ordinary verified refusal.');
         } catch (\Anis\Partners\Errors\AnisApiException) {
             self::assertCount(2, $wire->requests);
@@ -222,11 +222,12 @@ final class PartnerPipelineTest extends TestCase
     public function it_refuses_to_return_a_body_changed_after_signing(): void
     {
         $wire = new SignedFakeWire();
+        $wire->body = '{"operationId":"' . self::OPERATION . '","status":"completed"}';
         $wire->tamperAfterSigning = true;
         $client = self::client($wire);
 
         $this->expectException(UnverifiableResponseException::class);
-        $client->profile()->get();
+        $client->orders()->get(self::OPERATION);
     }
 
     #[Test]
@@ -282,9 +283,9 @@ final class PartnerPipelineTest extends TestCase
         $client = AnisPartnersClient::create(new ClientOptions('https://partners.example'), $capturingSigner, $wire, $factory, $factory);
         self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\Wallet ? $item->id : throw new \UnexpectedValueException(), iterator_to_array($client->wallets()->list())));
 
-        self::assertCount(3, $wire->requests);
-        self::assertSame('', $wire->requests[1]->getUri()->getQuery());
-        self::assertSame('cursor=page%20%2F%202', $wire->requests[2]->getUri()->getQuery());
+        self::assertCount(2, $wire->requests); // An information read is not verified, so no key-document request.
+        self::assertSame('', $wire->requests[0]->getUri()->getQuery());
+        self::assertSame('cursor=page%20%2F%202', $wire->requests[1]->getUri()->getQuery());
         self::assertStringContainsString('"@query": ?', $capturingSigner->bases[0]);
         self::assertStringContainsString('"@query": ?cursor=page%20%2F%202', $capturingSigner->bases[1]);
     }
@@ -299,7 +300,7 @@ final class PartnerPipelineTest extends TestCase
         ];
         self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof MaskedCard ? $item->id : throw new \UnexpectedValueException(), iterator_to_array(self::client($wire)->ownedCards()->list(self::WALLET))));
 
-        self::assertStringContainsString('/v1/wallets/' . self::WALLET . '/cards?cursor=owned-2', (string) $wire->requests[2]->getUri());
+        self::assertStringContainsString('/v1/wallets/' . self::WALLET . '/cards?cursor=owned-2', (string) $wire->requests[1]->getUri());
     }
 
     #[Test]
@@ -317,7 +318,7 @@ final class PartnerPipelineTest extends TestCase
             self::fail('A→B→A cursor cycle must stop pagination.');
         } catch (\Anis\Partners\Errors\MalformedResponseException $exception) {
             self::assertSame('Anis repeated a paging cursor.', $exception->getMessage());
-            self::assertCount(4, $wire->requests); // One key-document request and three pages.
+            self::assertCount(3, $wire->requests); // Three pages; an information read fetches no key document.
         }
     }
 
@@ -351,7 +352,7 @@ final class PartnerPipelineTest extends TestCase
         ];
         self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueCard ? $item->id : throw new \UnexpectedValueException(), iterator_to_array(self::client($wire)->catalogue()->listCards(self::WALLET, self::CARD))));
 
-        self::assertStringContainsString('/catalog/subcategories/' . self::CARD . '/cards?cursor=cards-2', (string) $wire->requests[2]->getUri());
+        self::assertStringContainsString('/catalog/subcategories/' . self::CARD . '/cards?cursor=cards-2', (string) $wire->requests[1]->getUri());
     }
 
     #[Test]
@@ -368,8 +369,8 @@ final class PartnerPipelineTest extends TestCase
         self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueCategory ? $item->id : throw new \UnexpectedValueException(), iterator_to_array($catalogue->listCategories(self::WALLET))));
         self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueSubcategory ? $item->id : throw new \UnexpectedValueException(), iterator_to_array($catalogue->listSubcategories(self::WALLET, self::CARD))));
 
-        self::assertStringContainsString('/catalog/categories?cursor=category-2', (string) $wire->requests[2]->getUri());
-        self::assertStringContainsString('/catalog/categories/' . self::CARD . '/subcategories?cursor=sub-2', (string) $wire->requests[4]->getUri());
+        self::assertStringContainsString('/catalog/categories?cursor=category-2', (string) $wire->requests[1]->getUri());
+        self::assertStringContainsString('/catalog/categories/' . self::CARD . '/subcategories?cursor=sub-2', (string) $wire->requests[3]->getUri());
     }
 
     #[Test]
