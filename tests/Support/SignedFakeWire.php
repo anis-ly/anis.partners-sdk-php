@@ -17,7 +17,7 @@ use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
-/** Records outgoing requests and signs each scripted response with a trusted test key. */
+/** Records outgoing requests and signs each scripted response with a trusted test key, or answers unsigned as an information route does. */
 final class SignedFakeWire implements ClientInterface
 {
     /** @var list<RequestInterface> */
@@ -29,6 +29,8 @@ final class SignedFakeWire implements ClientInterface
     /** @var list<array{status: int, body: string, headers: array<string, string|list<string>>}> */
     public array $responseQueue = [];
     public bool $tamperAfterSigning = false;
+    /** False answers like an information route: Content-Digest and X-Request-Id, no Signature or Signature-Input. */
+    public bool $signResponses = true;
     public ?\Throwable $failure = null;
     public ?SpanInterface $activeSpanAtSend = null;
 
@@ -70,6 +72,11 @@ final class SignedFakeWire implements ClientInterface
         $headers = $script['headers'] ?? $this->responseHeaders;
         $digest = 'sha-256=:' . base64_encode(hash('sha256', $body, true)) . ':';
         $headers['Content-Digest'] = $digest;
+        if (!$this->signResponses) {
+            $headers['X-Request-Id'] ??= 'req-test';
+
+            return new Response($status, $headers, $body);
+        }
         $requestSignatureInput = $request->getHeaderLine('Signature-Input');
         $components = PartnerResponseSignatureBase::components(
             $status,

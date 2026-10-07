@@ -8,7 +8,7 @@ use Anis\Partners\AnisPartnersException;
 use Anis\Partners\Internal\RetryAfter;
 use Anis\Partners\Models\Problem;
 
-/** Represents a verified refusal; branch on its machine code, not localized message text. */
+/** Represents an Anis refusal (verified first on every route whose answers Anis signs); branch on its machine code, not localized message text. */
 class AnisApiException extends \RuntimeException implements AnisPartnersException
 {
     public readonly ErrorCode $errorCode;
@@ -23,7 +23,7 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
     public readonly Problem $problem;
 
     /**
-     * Builds a refusal from its verified body and semantic response headers.
+     * Builds a refusal from its body (verified on a signed route) and semantic response headers.
      *
      */
     public function __construct(Problem $problem, int $status, ?int $retryAfter = null, bool $isReplayed = false)
@@ -49,7 +49,7 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
     }
 
     /**
-     * Parses verified refusal data, falling back to internal_error when its problem fields are unreadable.
+     * Parses refusal data (verified on a signed route), falling back to internal_error when its problem fields are unreadable.
      * @param array<string, mixed> $headers
      */
     public static function fromResponse(int $status, array $headers, string $body): self
@@ -124,7 +124,7 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
         return new $exception($problem, $status, $retryAfter, $replayed);
     }
 
-    /** Represents a verified success that supplied no JSON body, whose result cannot be safely inferred. */
+    /** Represents a success (verified on a signed route) that supplied no JSON body, whose result cannot be safely inferred. */
     public static function emptyBody(int $status): self
     {
         return new EmptyBodyException($status);

@@ -1,12 +1,15 @@
 # Signing-key cache
 
-The client fetches Anis's public response-signing keys and caches the document for ten minutes by default. A PHP-FPM
+The client fetches Anis's public response-signing keys the first time it verifies a signed answer (an order, a
+reveal, an enrollment step, or the signature self-check) and caches the document for ten minutes by default.
+Information reads are not signed by Anis and never fetch the keys. A PHP-FPM
 or other multi-process host has separate memory per worker. Pass a PSR-16 cache to `AnisPartnersClient::create()` so
 workers reuse the same document and avoid a fetch on each new process. The cache stores only the public document and
 its fetch time; an unknown key id still triggers an immediate refresh.
 
 The cache is part of the response-verification trust boundary. Use a cache namespace and backend that only your
-application can write; anyone who can replace this entry can substitute the public key used to verify Anis responses.
+application can write; anyone who can replace this entry can substitute the public key used to verify Anis's signed
+answers.
 
 ```php
 $client = AnisPartnersClient::create($options, $signer, keyCache: $psr16Cache);

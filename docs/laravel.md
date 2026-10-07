@@ -77,8 +77,8 @@ final class AnisPartnersServiceProvider extends ServiceProvider
 
 **The key cache store** must be one that every worker shares and only your application can write — `redis`,
 `database`, `memcached`, or `file` on a single server. Never `array`: it forgets everything after each request, so every
-request would fetch Anis's keys again. Anyone who can write that cache entry could replace the keys used to verify Anis's
-answers.
+order, reveal or enrollment request would fetch Anis's keys again. Anyone who can write that cache entry could replace the
+keys used to verify Anis's signed answers.
 
 ## 3. Use it
 

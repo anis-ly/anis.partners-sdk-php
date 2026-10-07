@@ -26,7 +26,7 @@ use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
 
-/** Provides typed operations over requests that are signed and answers that are verified. */
+/** Provides typed operations over requests that are always signed and answers that are verified on every route Anis signs. */
 final class AnisPartnersClient
 {
     private function __construct(
@@ -38,7 +38,7 @@ final class AnisPartnersClient
         private readonly DiagnosticsOperations $diagnosticsOperations,
     ) {}
 
-    /** Builds the complete signed and verified client for a host without requiring a container. */
+    /** Builds the complete signing and verifying client for a host without requiring a container. */
     public static function create(
         ClientOptions $options,
         RequestSigner $signer,

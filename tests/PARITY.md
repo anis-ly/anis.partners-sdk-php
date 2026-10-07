@@ -184,6 +184,19 @@ with the PHP test that demonstrates the behavior, or `n/a — <reason>` when the
 | `Only_a_thumbprint_has_a_safety_code` | SafetyCodeVectorTest::it_refuses_to_derive_a_code_from_an_invalid_thumbprint (data provider) |
 
 
+## Selective response signing (1.1.0)
+
+The .NET 1.3.0 table above predates selective response signing; the .NET SDK gains the same behaviour in parallel, so
+this section names the behaviour rather than a .NET test.
+
+| Behaviour | PHP |
+|---|---|
+| The signed and unsigned route sets equal the gateway's catalogue exactly; an uncatalogued route is treated as signed | ContractDriftTest::it_verifies_the_answers_of_exactly_the_routes_anis_signs; ContractDriftTest::it_verifies_the_answer_of_a_route_outside_the_catalogue |
+| An information read's unsigned answer is returned, its request is still signed, and no signing key is fetched | SelectiveResponseSigningTest::it_returns_an_information_answer_that_anis_does_not_sign (data provider, all nine reads) |
+| A signature on an information answer is ignored, never verified | SelectiveResponseSigningTest::it_does_not_verify_an_information_answer_even_when_it_carries_a_signature (data provider) |
+| An unsigned information refusal maps to its typed error | SelectiveResponseSigningTest::it_maps_an_unsigned_information_refusal_to_its_typed_error (data provider) |
+| A signed route's unsigned success or refusal is refused as `signature_missing` | SelectiveResponseSigningTest::it_refuses_a_signed_route_answer_that_carries_no_signature; SelectiveResponseSigningTest::it_refuses_an_unsigned_refusal_on_a_signed_route (data providers, all nine signed routes) |
+
 ## Additional PHP guarantees
 
 | Review finding | PHP regression test or documentation |

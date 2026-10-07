@@ -23,7 +23,7 @@ abstract class AbstractOperations
         try {
             return $hydrate($response->json);
         } catch (\Throwable) {
-            throw new MalformedResponseException('The verified Anis response does not match the requested model.');
+            throw new MalformedResponseException('The Anis response does not match the requested model.');
         }
     }
 
@@ -38,17 +38,17 @@ abstract class AbstractOperations
         try {
             $page = Page::fromArray($response->json);
         } catch (\Throwable) {
-            throw new MalformedResponseException('The verified Anis response does not match the requested page.');
+            throw new MalformedResponseException('The Anis response does not match the requested page.');
         }
         $items = [];
         foreach ($page->items as $item) {
             if (!is_array($item)) {
-                throw new MalformedResponseException('The verified Anis page contains an invalid item.');
+                throw new MalformedResponseException('The Anis page contains an invalid item.');
             }
             try {
                 $items[] = $hydrate($item);
             } catch (\Throwable) {
-                throw new MalformedResponseException('The verified Anis page item does not match the requested model.');
+                throw new MalformedResponseException('The Anis page item does not match the requested model.');
             }
         }
 

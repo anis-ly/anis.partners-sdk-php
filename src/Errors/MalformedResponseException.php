@@ -6,7 +6,7 @@ namespace Anis\Partners\Errors;
 
 use Anis\Partners\AnisPartnersException;
 
-/** Reports a verified answer that cannot be safely mapped to a partner model. */
+/** Reports an answer (verified first on a signed route) that cannot be safely mapped to a partner model. */
 final class MalformedResponseException extends \RuntimeException implements AnisPartnersException
 {
     /** Keeps response content out of the message and cause because it may contain credentials. */

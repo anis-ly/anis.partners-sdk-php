@@ -19,7 +19,7 @@ use OpenTelemetry\Context\ContextKeys;
 final class AnisPartnersTelemetry
 {
     private const NAME = 'anis-ly/partners';
-    private const VERSION = '1.0.0';
+    private const VERSION = '1.1.0';
 
     /** @var \WeakMap<MeterInterface, array<string, CounterInterface>>|null */
     private static ?\WeakMap $counters = null;
@@ -78,7 +78,7 @@ final class AnisPartnersTelemetry
     public static function verificationFailure(string $reason, string $client = 'default'): void
     {
         try {
-            self::counter('anis.partners.response.verification.failures', 'Count of verified answers discarded by response checks.')
+            self::counter('anis.partners.response.verification.failures', 'Count of answers on signed routes discarded by response checks.')
                 ->add(1, ['anis.client' => $client, 'anis.verification.failure' => $reason]);
         } catch (\Throwable) {
         }

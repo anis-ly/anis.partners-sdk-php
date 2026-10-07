@@ -29,7 +29,7 @@ use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
-/** Freezes, signs, sends, verifies, and only then decodes each partner response. */
+/** Freezes, signs, sends, verifies the answer on every route Anis signs, and only then decodes each partner response. */
 final class PartnerTransport
 {
     /** Connects the host HTTP factories and verifier to the same exact wire pipeline. */
@@ -45,7 +45,10 @@ final class PartnerTransport
         private readonly ?NonceFactory $nonceFactory = null,
     ) {}
 
-    /** Sends one signed request and parses only its verified JSON body. */
+    /**
+     * Sends one signed request and parses its JSON body: verified first on a route whose answers Anis signs, passed
+     * through unverified on an information route whose answers Anis does not sign (see PartnerRoutes::signsResponse()).
+     */
     public function request(string $method, string $template, string $path, ?SignatureProfile $profile, ?string $body = null, ?string $operationId = null, bool $enrollment = false): TransportResponse
     {
         $startedAt = microtime(true);
@@ -128,8 +131,12 @@ final class PartnerTransport
                 $headers[$headerName] = implode(', ', $stringValues);
                 $rawHeaders[$headerName] = $stringValues;
             }
-            $sentSignatureInput = $request->getHeaderLine('Signature-Input');
-            $this->verifier->verify(new VerifiableResponse($response->getStatusCode(), $headers, $bytes, $sentSignatureInput === '' ? null : $sentSignatureInput));
+            // Explicit per route, never "verify if present": a signed route's answer without a signature is refused, and
+            // an information route's answer is not verified even if a signature header happens to be present.
+            if (PartnerRoutes::signsResponse($method, $template)) {
+                $sentSignatureInput = $request->getHeaderLine('Signature-Input');
+                $this->verifier->verify(new VerifiableResponse($response->getStatusCode(), $headers, $bytes, $sentSignatureInput === '' ? null : $sentSignatureInput));
+            }
             $elapsed = (microtime(true) - $started) * 1000;
             AnisPartnersTelemetry::setAttribute($span, 'http.response.status_code', $statusCode);
             $requestId = $response->getHeaderLine('X-Request-Id');

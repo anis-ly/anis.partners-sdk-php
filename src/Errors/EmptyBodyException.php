@@ -6,7 +6,7 @@ namespace Anis\Partners\Errors;
 
 use Anis\Partners\Models\Problem;
 
-/** Distinguishes a verified empty success from a partner refusal without inspecting message text. */
+/** Distinguishes an empty success (verified first on a signed route) from a partner refusal without inspecting message text. */
 final class EmptyBodyException extends AnisApiException
 {
     public function __construct(int $status)
