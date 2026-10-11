@@ -32,6 +32,7 @@ final class ErrorMappingTest extends TestCase
     public static function publicCodeDecisions(): iterable
     {
         $decisions = [
+            ErrorCode::KeyNotRevocable->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::InsufficientBalance->value => [InsufficientBalanceException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::PriceChanged->value => [PriceChangedException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::QuantityUnavailable->value => [OutOfStockException::class, OrderRefusalOutcome::NotPlaced],
@@ -78,8 +79,11 @@ final class ErrorMappingTest extends TestCase
     #[Test]
     public function it_has_a_decision_for_every_published_code(): void
     {
-        self::assertCount(37, array_filter(ErrorCode::cases(), static fn(ErrorCode $code): bool => $code !== ErrorCode::Unknown));
-        self::assertCount(37, iterator_to_array(self::publicCodeDecisions()));
+        $published = array_map(static fn(ErrorCode $code): string => $code->value, array_filter(ErrorCode::cases(), static fn(ErrorCode $code): bool => $code !== ErrorCode::Unknown));
+        $decisions = array_keys(iterator_to_array(self::publicCodeDecisions()));
+        sort($published);
+        sort($decisions);
+        self::assertSame($published, $decisions);
     }
 
     /** @param class-string<AnisApiException> $exceptionClass */

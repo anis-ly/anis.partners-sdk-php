@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Anis\Partners;
 
 use Anis\Partners\Internal\Uuid;
+use Anis\Partners\Operations\AccessOperations;
 use Anis\Partners\Operations\CatalogueOperations;
 use Anis\Partners\Operations\DiagnosticsOperations;
 use Anis\Partners\Operations\OrderOperations;
@@ -29,7 +30,9 @@ use Psr\SimpleCache\CacheInterface;
 /** Provides typed operations over requests that are always signed and answers that are verified on every route Anis signs. */
 final class AnisPartnersClient
 {
+    public const VERSION = '2.0.0';
     private function __construct(
+        private readonly AccessOperations $accessOperations,
         private readonly ProfileOperations $profileOperations,
         private readonly WalletOperations $walletOperations,
         private readonly CatalogueOperations $catalogueOperations,
@@ -63,6 +66,7 @@ final class AnisPartnersClient
         $transport = new PartnerTransport($http, $requests, $streams, $options, $signer, $verifier, $clock, $logger, $nonceFactory ?? new RandomNonceFactory());
 
         return new self(
+            new AccessOperations($transport),
             new ProfileOperations($transport),
             new WalletOperations($transport),
             new CatalogueOperations($transport),
@@ -70,6 +74,12 @@ final class AnisPartnersClient
             new OwnedCardOperations($transport),
             new DiagnosticsOperations($transport),
         );
+    }
+
+    /** Returns application suspension and key revocation operations. */
+    public function access(): AccessOperations
+    {
+        return $this->accessOperations;
     }
 
     /** Returns the live profile operation group so permissions are re-read on demand. */

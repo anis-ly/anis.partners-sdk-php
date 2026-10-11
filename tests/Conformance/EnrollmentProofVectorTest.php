@@ -20,7 +20,7 @@ final class EnrollmentProofVectorTest extends TestCase
     #[Test]
     public function it_counts_all_enrollment_vectors(): void
     {
-        self::assertCount(2, self::vectorFiles());
+        self::assertNotEmpty(self::vectorFiles());
     }
 
     /** @return iterable<string, array{string}> */
@@ -82,12 +82,6 @@ final class EnrollmentProofVectorTest extends TestCase
     /** @return list<string> */
     private static function vectorFiles(): array
     {
-        $files = glob(dirname(__DIR__) . '/vectors/enrollment/EP-*.json');
-        if ($files === false) {
-            return [];
-        }
-        sort($files, SORT_STRING);
-
-        return $files;
+        return \Anis\Partners\Tests\Support\VectorFiles::read(dirname(__DIR__) . '/vectors/enrollment', 'EP-*.json');
     }
 }

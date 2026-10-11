@@ -219,3 +219,11 @@ this section names the behaviour rather than a .NET test.
 The response-signature parser intentionally rejects trailing text and noncanonical base64, although the current .NET
 parser accepts trailing text. The HTTPS rule also tightens the currently inspected .NET options, which still permit
 non-loopback HTTP. PHP follows the review rule for both cases; no other wire contract changed.
+
+## Security and card contract (2.0.0)
+
+- `PartnerResponseVerifierTest` uses freshly signed v2 fixtures for raw request binding, required tags, key compromise and lifecycle boundaries.
+- `AccessOperationsTest` checks stop paths, trimmed JSON reasons, nonce components, digest, user agent and typed answers.
+- `CardSummaryTest` checks full masked/reveal/order shapes, catalogue metadata, empty text omission and wallet currency.
+- The vector harness reads `request.signature` and validates a folder manifest when present. Request, response and enrollment folders currently have no manifest, so every matching file is enumerated without a fixed count.
+- Response vector JSON remains v1 pending orchestrator regeneration; its declared outcomes cannot pass v2 verification.

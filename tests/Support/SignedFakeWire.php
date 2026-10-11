@@ -60,6 +60,8 @@ final class SignedFakeWire implements ClientInterface
         if (str_ends_with((string) $request->getUri(), '/.well-known/partner-signing-keys.json')) {
             $jwk = $this->responseSigner->publicJwk()->toArray();
             $jwk['kid'] = $this->keyId;
+            $jwk['status'] = 'active';
+            $jwk['notBefore'] = '2026-01-01T00:00:00Z';
             return new Response(200, ['Content-Type' => 'application/json'], json_encode(['keys' => [$jwk]], JSON_THROW_ON_ERROR));
         }
         if ($this->failure !== null) {
@@ -83,6 +85,7 @@ final class SignedFakeWire implements ClientInterface
             $digest,
             self::headerLine($headers['X-Request-Id'] ?? 'req-test') ?? 'req-test',
             $requestSignatureInput !== '' ? $requestSignatureInput : null,
+            $request->getHeaderLine('Signature') !== '' ? $request->getHeaderLine('Signature') : null,
             self::headerLine($headers['Location'] ?? null),
             self::headerLine($headers['Retry-After'] ?? null),
             self::headerLine($headers['Idempotency-Replayed'] ?? null),

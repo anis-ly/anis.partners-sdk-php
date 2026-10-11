@@ -22,6 +22,8 @@ final readonly class CatalogueCard implements \JsonSerializable
         public bool $available = false,
         public ?int $minimumQuantity = null,
         public ?int $maximumQuantity = null,
+        public ?string $logo = null,
+        public ?CardGroup $category = null,
     ) {}
 
     /**
@@ -31,6 +33,7 @@ final readonly class CatalogueCard implements \JsonSerializable
     public static function fromArray(array $data): self
     {
         $name = ModelData::object($data, 'name');
+        $category = ModelData::object($data, 'category');
         $prices = [];
         foreach (['unitPrice', 'businessPrice', 'personalPrice', 'specialOfferPrice'] as $field) {
             $value = ModelData::object($data, $field);
@@ -50,6 +53,8 @@ final readonly class CatalogueCard implements \JsonSerializable
             ModelData::boolean($data, 'available'),
             ModelData::nullableInteger($data, 'minimumQuantity'),
             ModelData::nullableInteger($data, 'maximumQuantity'),
+            ModelData::nullableString($data, 'logo'),
+            $category === null ? null : CardGroup::fromArray($category),
         );
     }
 }

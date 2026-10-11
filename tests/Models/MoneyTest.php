@@ -14,7 +14,7 @@ final class MoneyTest extends TestCase
     public function it_reads_and_writes_amounts_at_three_places(): void
     {
         $money = Money::fromArray([
-            'amount' => '21',
+            'amount' => '21.000',
             'currency' => 'LYD',
             'asOf' => '2026-09-19T11:00:00+03:00',
         ]);
@@ -70,10 +70,9 @@ final class MoneyTest extends TestCase
     }
 
     #[Test]
-    public function it_reads_wire_amounts_only_when_they_have_at_most_three_decimal_places(): void
+    public function it_requires_exactly_three_decimal_places_for_wire_amounts(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('Anis amounts have at most three decimal places');
+        $this->expectException(\UnexpectedValueException::class);
         Money::fromArray(['amount' => '0.0004', 'currency' => 'LYD']);
     }
 
@@ -84,9 +83,10 @@ final class MoneyTest extends TestCase
     }
 
     #[Test]
-    public function it_preserves_negative_thousandths_for_the_order_price_guard(): void
+    public function it_refuses_negative_amounts(): void
     {
-        self::assertSame('-0.001', Money::of('-0.001', 'LYD')->amount());
+        $this->expectException(\InvalidArgumentException::class);
+        Money::of('-0.001', 'LYD');
     }
 
     #[Test]

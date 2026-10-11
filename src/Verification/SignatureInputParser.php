@@ -9,7 +9,7 @@ final class SignatureInputParser
 {
     /**
      * Accepts only the supported grammar so the response remains bound to the sent request.
-     * @return array{label: string, identifiers: list<string>, created: int, keyId: string, algorithm: ?string}|null
+     * @return array{label: string, identifiers: list<string>, created: int, keyId: string, algorithm: ?string, tag: ?string}|null
      */
     public static function tryParse(string $value): ?array
     {
@@ -54,6 +54,8 @@ final class SignatureInputParser
         $created = null;
         $keyId = null;
         $algorithm = null;
+        $tag = null;
+        $seen = [];
         while ($index < strlen($value)) {
             if ($value[$index] !== ';') {
                 return null;
@@ -64,6 +66,10 @@ final class SignatureInputParser
                 return null;
             }
             $name = substr($value, $index, $nameEnd - $index);
+            if (isset($seen[$name])) {
+                return null;
+            }
+            $seen[$name] = true;
             $index = $nameEnd + 1;
             if (isset($value[$index]) && $value[$index] === '"') {
                 $end = strpos($value, '"', $index + 1);
@@ -76,6 +82,8 @@ final class SignatureInputParser
                     $keyId = $text;
                 } elseif ($name === 'alg') {
                     $algorithm = $text;
+                } elseif ($name === 'tag') {
+                    $tag = $text;
                 }
             } else {
                 $end = strpos($value, ';', $index);
@@ -102,6 +110,6 @@ final class SignatureInputParser
             return null;
         }
 
-        return ['label' => $label, 'identifiers' => $identifiers, 'created' => $created, 'keyId' => $keyId, 'algorithm' => $algorithm];
+        return ['label' => $label, 'identifiers' => $identifiers, 'created' => $created, 'keyId' => $keyId, 'algorithm' => $algorithm, 'tag' => $tag];
     }
 }

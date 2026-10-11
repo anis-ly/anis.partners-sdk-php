@@ -38,6 +38,7 @@ final class SelectiveResponseSigningTest extends TestCase
     /** @return iterable<string, array{\Closure(SignedFakeWire): mixed, string}> */
     public static function informationReads(): iterable
     {
+        yield 'GET /v1/wallets/{walletId}/catalog/cards/{cardId}' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->catalogue()->getCard(self::WALLET, self::CARD), '{"id":"' . self::CARD . '","subcategoryId":"' . self::CARD . '"}'];
         yield 'GET /v1/profile' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->profile()->get(), '{}'];
         yield 'GET /v1/wallets' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->wallets()->listPage(), self::PAGE];
         yield 'GET /v1/wallets/{walletId}' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->wallets()->get(self::WALLET), '{"id":"' . self::WALLET . '"}'];
@@ -45,17 +46,19 @@ final class SelectiveResponseSigningTest extends TestCase
         yield 'GET /v1/wallets/{walletId}/catalog/categories/{categoryId}/subcategories' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->catalogue()->listSubcategoriesPage(self::WALLET, self::CARD), self::PAGE];
         yield 'GET /v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->catalogue()->getSubcategory(self::WALLET, self::CARD), '{"id":"' . self::CARD . '","categoryId":"' . self::WALLET . '"}'];
         yield 'GET /v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}/cards' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->catalogue()->listCardsPage(self::WALLET, self::CARD), self::PAGE];
-        yield 'GET /v1/wallets/{walletId}/cards' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->ownedCards()->listPage(self::WALLET), self::PAGE];
-        yield 'GET /v1/wallets/{walletId}/cards/{soldCardId}' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->ownedCards()->get(self::WALLET, self::CARD), '{"id":"' . self::CARD . '"}'];
+        yield 'GET /v1/wallets/{walletId}/owned-cards' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->ownedCards()->listPage(self::WALLET), self::PAGE];
+        yield 'GET /v1/wallets/{walletId}/owned-cards/{soldCardId}' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->ownedCards()->get(self::WALLET, self::CARD), '{"soldCardId":"' . self::CARD . '"}'];
     }
 
     /** @return iterable<string, array{\Closure(SignedFakeWire): mixed, string}> */
     public static function signedRoutes(): iterable
     {
+        yield 'POST /v1/application/suspend' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->access()->suspendApplication('Maintenance'), '{"applicationId":"' . self::KEY . '","status":"suspended"}'];
+        yield 'POST /v1/keys/{keyId}/revoke' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->access()->revokeKey(self::KEY, 'Custody incident'), '{"keyId":"' . self::KEY . '","status":"revoked"}'];
         yield 'POST /v1/wallets/{walletId}/orders' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->orders()->create(self::WALLET, self::OPERATION, self::order()), '{"operationId":"' . self::OPERATION . '","status":"completed"}'];
         yield 'GET /v1/orders/{operationId}' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->orders()->get(self::OPERATION), '{"operationId":"' . self::OPERATION . '","status":"completed"}'];
-        yield 'POST /v1/wallets/{walletId}/cards/{soldCardId}/reveal' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->ownedCards()->reveal(self::WALLET, self::CARD), '{"soldCardId":"' . self::CARD . '","voucher":"unsigned-voucher"}'];
-        yield 'POST /v1/wallets/{walletId}/invoices/{invoiceId}/cards/reveal' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->ownedCards()->revealInvoice(self::WALLET, self::OPERATION), '{"invoiceId":"' . self::OPERATION . '","items":[]}'];
+        yield 'POST /v1/wallets/{walletId}/owned-cards/{soldCardId}/reveal' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->ownedCards()->reveal(self::WALLET, self::CARD), '{"soldCardId":"' . self::CARD . '","voucher":"unsigned-voucher"}'];
+        yield 'POST /v1/wallets/{walletId}/invoices/{invoiceId}/owned-cards/reveal' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->ownedCards()->revealInvoice(self::WALLET, self::OPERATION), '{"invoiceId":"' . self::OPERATION . '","items":[]}'];
         yield 'POST /v1/diagnostics/signature' => [static fn(SignedFakeWire $wire): mixed => self::client($wire)->diagnostics()->checkSignature(), '{}'];
         yield 'GET /v1/enrollments/{invitationId}' => [static fn(SignedFakeWire $wire): mixed => self::enrollment($wire)->get(), '{"state":"pendingApproval"}'];
         yield 'POST /v1/enrollments/{invitationId}/keys' => [static fn(SignedFakeWire $wire): mixed => self::enrollment($wire)->submitKey(new EnrollmentKeyRequest($wire->requestPublicJwk(), new \DateTimeImmutable('now'), new \DateTimeImmutable('+1 year'))), '{"keyId":"' . self::KEY . '"}'];

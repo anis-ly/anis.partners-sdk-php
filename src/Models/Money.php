@@ -19,6 +19,9 @@ final readonly class Money implements \JsonSerializable
         if (!is_int($thousandths) || !is_string($currency)) {
             throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money requires integer thousandths and a string currency.');
         }
+        if ($thousandths < 0 || preg_match('/\A[A-Z]{3}\z/D', $currency) !== 1) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money requires a nonnegative amount and an uppercase three-letter currency.');
+        }
         $this->thousandths = $thousandths;
         $this->currency = $currency;
         $this->asOf = $asOf;
@@ -75,6 +78,9 @@ final readonly class Money implements \JsonSerializable
         if (!is_string($amount) || !is_string($currency)) {
             throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('Money amount and currency must be strings.');
         }
+        if (preg_match('/\A\d+\.\d{3}\z/D', $amount) !== 1 || preg_match('/\A[A-Z]{3}\z/D', $currency) !== 1) {
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('Wire money requires a nonnegative amount with exactly three decimal places and an uppercase three-letter currency.');
+        }
         $asOf = ModelData::dateTime($data, 'asOf');
         $money = self::of(self::decimalString($amount), $currency);
 
@@ -87,16 +93,10 @@ final readonly class Money implements \JsonSerializable
         if (!is_int($quantity)) {
             throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money multiplication quantity must be an integer.');
         }
-        if ($quantity === -1 && $this->thousandths === PHP_INT_MIN) {
-            throw new \Anis\Partners\Errors\AnisPartnersOverflowException('The money multiplication exceeds the supported integer range.');
+        if ($quantity < 0) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('Money multiplication quantity must be nonnegative.');
         }
-        if ($quantity > 0 && ($this->thousandths > intdiv(PHP_INT_MAX, $quantity) || $this->thousandths < intdiv(PHP_INT_MIN, $quantity))) {
-            throw new \Anis\Partners\Errors\AnisPartnersOverflowException('The money multiplication exceeds the supported integer range.');
-        }
-        if ($quantity < -1 && $this->thousandths > 0 && $this->thousandths > intdiv(PHP_INT_MIN, $quantity)) {
-            throw new \Anis\Partners\Errors\AnisPartnersOverflowException('The money multiplication exceeds the supported integer range.');
-        }
-        if ($quantity < -1 && $this->thousandths < 0 && $this->thousandths < intdiv(PHP_INT_MAX, $quantity)) {
+        if ($quantity > 0 && $this->thousandths > intdiv(PHP_INT_MAX, $quantity)) {
             throw new \Anis\Partners\Errors\AnisPartnersOverflowException('The money multiplication exceeds the supported integer range.');
         }
 
@@ -106,15 +106,12 @@ final readonly class Money implements \JsonSerializable
     /** Returns a decimal string with exactly three places for the wire contract. */
     public function amount(): string
     {
-        $negative = $this->thousandths < 0;
-        $digits = ltrim((string) $this->thousandths, '-');
+        $digits = (string) $this->thousandths;
         $digits = str_pad($digits, 4, '0', STR_PAD_LEFT);
         $whole = substr($digits, 0, -3);
         $fraction = substr($digits, -3);
 
-        $sign = $negative ? '-' : '';
-
-        return $sign . $whole . '.' . $fraction;
+        return $whole . '.' . $fraction;
     }
 
     /**

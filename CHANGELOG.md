@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0] - 2026-10-11
+
+### Breaking changes
+
+- 1.x is deprecated — upgrade to 2.0.0.
+- Signed answers require `tag="anis-response-v2"` and bind both raw request signature fields.
+- Response-key verification rejects compromised keys, retired keys signing after retirement, and next keys signing before activation.
+- Owned-card routes use `/owned-cards`; `MaskedCard` uses `soldCardId`, `operationId` and nested `CardSummary`.
+- Reveals and order credentials include the full card summary. Catalogue cards include logo and category.
+- Wallet currency is carried by `balance.currency`; wire Money amounts are nonnegative decimals with three places and uppercase currency.
+
+### Added
+
+- `access()->suspendApplication($reason)` and `access()->revokeKey($keyId, $reason)` with signed JSON reasons.
+- `catalogue()->getCard($walletId, $cardId)` for a single wallet-priced catalogue card.
+
 ## [1.1.0] - 2026-10-07
 
 ### Changed

@@ -45,7 +45,7 @@ final class SecretRedactionTest extends TestCase
     #[Test]
     public function it_omits_raw_response_bytes_from_native_diagnostic_output(): void
     {
-        $response = new VerifiableResponse(200, ['Content-Type' => 'application/json'], '{"voucher":"debug-response-voucher"}', null);
+        $response = new VerifiableResponse(200, ['Content-Type' => 'application/json'], '{"voucher":"debug-response-voucher"}', null, null);
 
         ob_start();
         var_dump($response);
@@ -53,6 +53,7 @@ final class SecretRedactionTest extends TestCase
 
         self::assertStringNotContainsString('debug-response-voucher', $diagnostics);
         self::assertStringNotContainsString('body', $diagnostics);
+        self::assertStringNotContainsString('request-signature-secret', $diagnostics);
     }
 
     #[Test]

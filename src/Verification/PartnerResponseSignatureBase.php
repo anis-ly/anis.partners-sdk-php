@@ -9,7 +9,7 @@ final class PartnerResponseSignatureBase
 {
     public const LABEL = 'sig1';
     public const ALGORITHM = 'ecdsa-p256-sha256';
-    public const PROFILE = 'partner-response-v1';
+    public const PROFILE = 'anis-response-v2';
     public const MAX_AGE_SECONDS = 60;
 
     /**
@@ -21,6 +21,7 @@ final class PartnerResponseSignatureBase
         string $contentDigest,
         string $requestId,
         ?string $requestSignatureInput,
+        ?string $requestSignature,
         ?string $location,
         ?string $retryAfter,
         ?string $idempotencyReplayed,
@@ -31,8 +32,9 @@ final class PartnerResponseSignatureBase
             ['identifier' => '"content-digest"', 'value' => $contentDigest],
             ['identifier' => '"x-request-id"', 'value' => $requestId],
         ];
-        if ($requestSignatureInput !== null && $requestSignatureInput !== '') {
-            $components[] = ['identifier' => '"signature-input";req', 'value' => $requestSignatureInput];
+        if ($requestSignature !== null && $requestSignature !== '') {
+            $components[] = ['identifier' => '"signature-input";req', 'value' => $requestSignatureInput ?? ''];
+            $components[] = ['identifier' => '"signature";req', 'value' => $requestSignature];
         }
         foreach ([
             'location' => $location,
@@ -55,7 +57,7 @@ final class PartnerResponseSignatureBase
     public static function parameters(array $components, int $created, string $keyId): string
     {
         return '(' . implode(' ', array_column($components, 'identifier')) . ');created=' . $created
-            . ';keyid="' . $keyId . '";alg="' . self::ALGORITHM . '"';
+            . ';keyid="' . $keyId . '";alg="' . self::ALGORITHM . '";tag="' . self::PROFILE . '"';
     }
 
     /**

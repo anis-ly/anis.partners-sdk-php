@@ -22,6 +22,10 @@ trait WireJsonSerialization
     private static function serializeWireMembers(array $members): array
     {
         foreach ($members as $key => $value) {
+            if ($value === '' || ($value instanceof LocalizedText && ($value->ar === null || $value->ar === '') && ($value->en === null || $value->en === ''))) {
+                unset($members[$key]);
+                continue;
+            }
             $members[$key] = self::serializeWireValue($value);
         }
 

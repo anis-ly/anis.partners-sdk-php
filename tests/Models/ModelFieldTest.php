@@ -127,22 +127,23 @@ final class ModelFieldTest extends TestCase
     public function it_reads_masked_card_price_expiry_invoice_and_catalogue_details(): void
     {
         $card = MaskedCard::fromArray([
-            'id' => '4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046',
+            'soldCardId' => '4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046',
             'credentialAvailable' => false,
             'unitPrice' => ['amount' => '10.500', 'currency' => 'LYD'],
             'expiryDate' => '2027-03-31',
             'invoiceNumber' => 1042,
-            'faceValue' => '10 USD',
-            'subcategory' => ['id' => '7a1c3e5f-2b4d-4f68-8a0c-9e1b3d5f7a2c', 'name' => ['ar' => 'فئة', 'en' => 'Games']],
+            'card' => ['id' => '8d4b1e73-9a25-4c60-8f37-6b2e9d5a1c48', 'faceValue' => '10 USD',
+                'subcategory' => ['id' => '7a1c3e5f-2b4d-4f68-8a0c-9e1b3d5f7a2c', 'name' => ['ar' => 'فئة', 'en' => 'Games']]],
         ]);
 
         self::assertSame('10.500', $card->unitPrice?->amount());
         self::assertSame('2027-03-31', $card->expiryDate);
         self::assertSame(1042, $card->invoiceNumber);
-        self::assertSame('10 USD', $card->faceValue);
-        self::assertSame('7a1c3e5f-2b4d-4f68-8a0c-9e1b3d5f7a2c', $card->subcategory?->id);
-        self::assertNotNull($card->subcategory);
-        self::assertSame('Games', $card->subcategory->name?->en);
+        self::assertNotNull($card->card);
+        self::assertSame('10 USD', $card->card->faceValue);
+        self::assertSame('7a1c3e5f-2b4d-4f68-8a0c-9e1b3d5f7a2c', $card->card->subcategory?->id);
+        self::assertNotNull($card->card->subcategory);
+        self::assertSame('Games', $card->card->subcategory->name?->en);
         self::assertFalse($card->credentialAvailable);
     }
 
@@ -150,15 +151,15 @@ final class ModelFieldTest extends TestCase
     public function it_leaves_new_masked_card_members_null_when_absent(): void
     {
         $card = MaskedCard::fromArray([
-            'id' => '4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046',
+            'soldCardId' => '4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046',
             'credentialAvailable' => true,
         ]);
 
         self::assertNull($card->unitPrice);
         self::assertNull($card->expiryDate);
         self::assertNull($card->invoiceNumber);
-        self::assertNull($card->faceValue);
-        self::assertNull($card->subcategory);
+        self::assertNull($card->card?->faceValue);
+        self::assertNull($card->card?->subcategory);
     }
 
     #[Test]

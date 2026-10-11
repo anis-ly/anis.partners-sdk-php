@@ -15,7 +15,7 @@ final class RevealedCredential implements \JsonSerializable
     public readonly ?\DateTimeImmutable $revealedAt;
     public readonly ?string $expiryDate;
     public readonly ?string $invoiceId;
-    public readonly ?MaskedCardProduct $card;
+    public readonly ?CardSummary $card;
     public readonly ?\DateTimeImmutable $purchasedAt;
     public readonly ?string $serialNumber;
     public readonly ?string $voucher;
@@ -32,7 +32,7 @@ final class RevealedCredential implements \JsonSerializable
         ?\DateTimeImmutable $revealedAt = null,
         ?string $expiryDate = null,
         ?string $invoiceId = null,
-        ?MaskedCardProduct $card = null,
+        ?CardSummary $card = null,
         ?\DateTimeImmutable $purchasedAt = null,
     ) {
         $this->soldCardId = $soldCardId;
@@ -59,16 +59,16 @@ final class RevealedCredential implements \JsonSerializable
             ModelData::dateTime($data, 'revealedAt'),
             ModelData::date($data, 'expiryDate'),
             ModelData::nullableUuid($data, 'invoiceId'),
-            $card === null ? null : MaskedCardProduct::fromArray($card),
+            $card === null ? null : CardSummary::fromArray($card),
             ModelData::dateTime($data, 'purchasedAt'),
         );
     }
 
     /** Serializes the wire credential for partner-owned storage; use diagnostic methods to redact it. */
-    /** @return array<string, mixed> */
+    /** @return array<array-key, mixed> */
     public function jsonSerialize(): array
     {
-        return [
+        return self::serializeWireMembers([
             'soldCardId' => $this->soldCardId,
             'serialNumber' => $this->serialNumber,
             'voucher' => $this->voucher,
@@ -77,7 +77,7 @@ final class RevealedCredential implements \JsonSerializable
             'invoiceId' => $this->invoiceId,
             'card' => $this->card?->jsonSerialize(),
             'purchasedAt' => self::utc($this->purchasedAt),
-        ];
+        ]);
     }
 
     /** Redacts secret fields so accidental string interpolation cannot disclose a voucher or serial. */

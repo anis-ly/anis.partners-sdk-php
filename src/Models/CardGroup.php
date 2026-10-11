@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Anis\Partners\Models;
 
-/** Identifies the catalogue subcategory represented on a sold card. */
-final readonly class MaskedCardSubcategory implements \JsonSerializable
+/** Identifies the catalogue category or subcategory represented on a card. */
+final readonly class CardGroup implements \JsonSerializable
 {
     use WireJsonSerialization;
 

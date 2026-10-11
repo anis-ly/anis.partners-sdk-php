@@ -32,6 +32,20 @@ final class PartnerPipelineTest extends TestCase
     private const CARD = '4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046';
 
     #[Test]
+    public function it_reads_one_catalogue_card_without_fetching_response_keys(): void
+    {
+        $wire = new SignedFakeWire();
+        $wire->signResponses = false;
+        $wire->body = '{"id":"' . self::CARD . '","subcategoryId":"' . self::CARD . '","logo":"https://assets.anis.ly/card.png"}';
+        $card = self::client($wire)->catalogue()->getCard(self::WALLET, self::CARD);
+        self::assertSame(self::CARD, $card->id);
+        self::assertSame('https://assets.anis.ly/card.png', $card->logo);
+        self::assertCount(1, $wire->requests);
+        self::assertSame('GET', $wire->requests[0]->getMethod());
+        self::assertSame('/v1/wallets/' . self::WALLET . '/catalog/cards/' . self::CARD, $wire->requests[0]->getUri()->getPath());
+    }
+
+    #[Test]
     public function it_signs_a_safe_read_without_nonce_or_content_digest(): void
     {
         $wire = new SignedFakeWire();
@@ -295,12 +309,12 @@ final class PartnerPipelineTest extends TestCase
     {
         $wire = new SignedFakeWire();
         $wire->responseQueue = [
-            ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26"}],"nextCursor":"owned-2"}', 'headers' => ['X-Request-Id' => 'owned-1']],
-            ['status' => 200, 'body' => '{"items":[{"id":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'owned-2']],
+            ['status' => 200, 'body' => '{"items":[{"soldCardId":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26"}],"nextCursor":"owned-2"}', 'headers' => ['X-Request-Id' => 'owned-1']],
+            ['status' => 200, 'body' => '{"items":[{"soldCardId":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'owned-2']],
         ];
-        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof MaskedCard ? $item->id : throw new \UnexpectedValueException(), iterator_to_array(self::client($wire)->ownedCards()->list(self::WALLET))));
+        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof MaskedCard ? $item->soldCardId : throw new \UnexpectedValueException(), iterator_to_array(self::client($wire)->ownedCards()->list(self::WALLET))));
 
-        self::assertStringContainsString('/v1/wallets/' . self::WALLET . '/cards?cursor=owned-2', (string) $wire->requests[1]->getUri());
+        self::assertStringContainsString('/v1/wallets/' . self::WALLET . '/owned-cards?cursor=owned-2', (string) $wire->requests[1]->getUri());
     }
 
     #[Test]
