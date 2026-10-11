@@ -2,6 +2,9 @@
 
 | PHP call | Route | Required permission | Request body | Answer signed by Anis |
 |---|---|---|---|---|
+| `access()->suspendApplication($reason)` | `POST /v1/application/suspend` | none for an admitted request | `{reason}` | yes — verified |
+| `access()->revokeKey($keyId, $reason)` | `POST /v1/keys/{keyId}/revoke` | none for an admitted request | `{reason}` | yes — verified |
+| `catalogue()->getCard($walletId, $cardId)` | `GET /v1/wallets/{walletId}/catalog/cards/{cardId}` | `catalogue:read` | none | no |
 | `profile()->get()` | `GET /v1/profile` | `profile:read` | none | no |
 | `wallets()->list()` / `listPage()` | `GET /v1/wallets` | `wallets:read` | none | no |
 | `wallets()->get($walletId)` | `GET /v1/wallets/{walletId}` | `wallets:read` | none | no |
@@ -11,10 +14,10 @@
 | `catalogue()->listCards()` / `listCardsPage()` | `GET /v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}/cards` | `catalogue:read` | none | no |
 | `orders()->create()` / `resume()` | `POST /v1/wallets/{walletId}/orders` | `orders:create` | order JSON | yes — verified |
 | `orders()->get($operationId)` | `GET /v1/orders/{operationId}` | `orders:read` or own-order `orders:create` | none | yes — verified |
-| `ownedCards()->list()` / `listPage()` | `GET /v1/wallets/{walletId}/cards` | `cards:read` | none | no |
-| `ownedCards()->get()` | `GET /v1/wallets/{walletId}/cards/{soldCardId}` | `cards:read` | none | no |
-| `ownedCards()->reveal()` | `POST /v1/wallets/{walletId}/cards/{soldCardId}/reveal` | `cards:reveal` | no body | yes — verified |
-| `ownedCards()->revealInvoice()` | `POST /v1/wallets/{walletId}/invoices/{invoiceId}/cards/reveal` | `cards:reveal` | no body | yes — verified |
+| `ownedCards()->list()` / `listPage()` | `GET /v1/wallets/{walletId}/owned-cards` | `cards:read` | none | no |
+| `ownedCards()->get()` | `GET /v1/wallets/{walletId}/owned-cards/{soldCardId}` | `cards:read` | none | no |
+| `ownedCards()->reveal()` | `POST /v1/wallets/{walletId}/owned-cards/{soldCardId}/reveal` | `cards:reveal` | no body | yes — verified |
+| `ownedCards()->revealInvoice()` | `POST /v1/wallets/{walletId}/invoices/{invoiceId}/owned-cards/reveal` | `cards:reveal` | no body | yes — verified |
 | `diagnostics()->checkSignature()` | `POST /v1/diagnostics/signature` | `diagnostics:use` | `{}` | yes — verified |
 | `EnrollmentClient::get()` | `GET /v1/enrollments/{invitationId}` | enrollment token | none | yes — verified |
 | `EnrollmentClient::submitKey()` | `POST /v1/enrollments/{invitationId}/keys` | enrollment token | public key | yes — verified |
@@ -27,8 +30,8 @@ application manages its own cursor. Reveal requests contain zero body bytes; the
 
 ## Which answers are verified
 
-Anis signs only the answers that move money, deliver card codes, or establish a key: orders, the two reveals,
-enrollment, and the signature self-check. On those routes **every** answer — the success and each refusal — is
+Anis signs only the answers that move money, deliver card codes, stop access, or establish a key: orders, the two reveals,
+access stops, enrollment, and the signature self-check. On those routes **every** answer — the success and each refusal — is
 verified before it is returned, and an answer without a valid signature is discarded as
 `UnverifiableResponseException` (an order create reports it as `OrderOutcomeUnknown`, to be resumed). Anis does not
 sign the information reads — profile, wallets, catalogue, and owned-card lists and details — nor the signing-key

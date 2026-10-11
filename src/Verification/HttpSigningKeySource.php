@@ -89,7 +89,8 @@ final class HttpSigningKeySource implements SigningKeySource
     {
         try {
             $uri = rtrim($this->authority, '/') . '/.well-known/partner-signing-keys.json';
-            $request = $this->requestFactory->createRequest('GET', $uri)->withHeader('Accept-Encoding', 'identity');
+            $request = $this->requestFactory->createRequest('GET', $uri)->withHeader('Accept-Encoding', 'identity')
+                ->withHeader('User-Agent', 'anis-partners-php/' . \Anis\Partners\AnisPartnersClient::VERSION);
             $response = $this->client->sendRequest($request);
             if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
                 throw new SigningKeysUnavailableException();

@@ -10,8 +10,9 @@ final readonly class SigningKeySet
     /**
      * Keeps the current published key list immutable while a response is being checked.
      * @param list<PartnerJwk> $keys
+     * @param list<RevokedSigningKey> $revoked
      */
-    public function __construct(public array $keys) {}
+    public function __construct(public array $keys, public array $revoked = []) {}
 
     /** Parses the key document and refuses invalid JSON rather than verifying against partial data. */
     public static function fromJson(string $json): self
@@ -32,6 +33,15 @@ final readonly class SigningKeySet
             $keys[] = PartnerJwk::fromArray($key);
         }
 
-        return new self($keys);
+        $revoked = [];
+        foreach (\Anis\Partners\Models\ModelData::objectList($document, 'revoked') as $key) {
+            $kid = \Anis\Partners\Models\ModelData::nullableString($key, 'kid');
+            $at = \Anis\Partners\Models\ModelData::dateTime($key, 'compromisedAt');
+            if ($kid === null || $kid === '' || $at === null) {
+                throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('A revoked signing-key entry is incomplete.');
+            }
+            $revoked[] = new RevokedSigningKey($kid, $at);
+        }
+        return new self($keys, $revoked);
     }
 }

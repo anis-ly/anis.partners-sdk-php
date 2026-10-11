@@ -333,7 +333,7 @@ final class OrderOperationsTest extends TestCase
     {
         $wire = new SignedFakeWire();
         $client = self::client($wire);
-        $order = new CreateOrderRequest(self::CARD, 2, Money::of('-0.001', 'LYD'), Money::of('-0.002', 'LYD'));
+        $order = new CreateOrderRequest(self::CARD, 2, Money::of('0.000', 'LYD'), Money::of('0.000', 'LYD'));
 
         $this->expectException(\InvalidArgumentException::class);
         try {

@@ -46,6 +46,10 @@ final class PartnerResponseVerifier
             $this->fail(ResponseVerificationFailure::AlgorithmNotSupported);
         }
 
+        if ($parsed['tag'] !== PartnerResponseSignatureBase::PROFILE) {
+            $this->fail(ResponseVerificationFailure::ProfileUnexpected);
+        }
+
         $contentDigest = $response->header('Content-Digest');
         $computedDigest = 'sha-256=:' . base64_encode(hash('sha256', $response->body, true)) . ':';
         // The signature covers the digest header, so compare it to the received body before cryptographic checks.
@@ -58,11 +62,15 @@ final class PartnerResponseVerifier
         if ($requestId === null || $requestId === '') {
             $this->fail(ResponseVerificationFailure::CoveredComponentsMismatch);
         }
+        if (($response->requestSignatureInput !== null && $response->requestSignatureInput !== '') !== ($response->requestSignature !== null && $response->requestSignature !== '')) {
+            $this->fail(ResponseVerificationFailure::CoveredComponentsMismatch);
+        }
         $components = PartnerResponseSignatureBase::components(
             $response->status,
             $contentDigest,
             $requestId,
             $response->requestSignatureInput,
+            $response->requestSignature,
             $response->header('Location'),
             $response->header('Retry-After'),
             $response->header('Idempotency-Replayed'),
@@ -84,10 +92,12 @@ final class PartnerResponseVerifier
         }
 
         $document = $this->keys->get();
+        $this->rejectRevoked($document, $parsed['keyId']);
         $key = $this->resolve($document, $parsed['keyId']);
         if ($key === null) {
             Log::write($this->logger ?? new NullLogger(), 'warning', 'Anis used an unknown signing key; refreshing once for key {key_id}', 1006, ['key_id' => $parsed['keyId']]);
             $document = $this->keys->refresh();
+            $this->rejectRevoked($document, $parsed['keyId']);
             $key = $this->resolve($document, $parsed['keyId']);
         }
         foreach ($document->keys as $candidate) {
@@ -97,6 +107,17 @@ final class PartnerResponseVerifier
         }
         if ($key === null) {
             $this->fail(ResponseVerificationFailure::UnknownKey);
+        }
+
+        if ($key->status === 'retired' && $key->retiredAt !== null && $parsed['created'] > (float) $key->retiredAt->format('U.u')) {
+            $this->fail(ResponseVerificationFailure::KeyRetired);
+        }
+        if ($key->status === 'next' && $key->notBefore !== null && $parsed['created'] < (float) $key->notBefore->format('U.u')) {
+            $this->fail(ResponseVerificationFailure::KeyNotYetValid);
+        }
+
+        if (!in_array($key->status, ['active', 'next', 'retired'], true) || $key->notBefore === null || ($key->status === 'retired' && $key->retiredAt === null)) {
+            $this->fail(ResponseVerificationFailure::KeyRejected);
         }
 
         $signatureBytes = $this->signatureBytes($signature);
@@ -121,6 +142,15 @@ final class PartnerResponseVerifier
         if ($verified !== 1) {
             self::clearOpenSslErrors();
             $this->fail(ResponseVerificationFailure::SignatureInvalid);
+        }
+    }
+
+    private function rejectRevoked(SigningKeySet $document, string $keyId): void
+    {
+        foreach ($document->revoked as $key) {
+            if ($key->kid === $keyId) {
+                $this->fail(ResponseVerificationFailure::KeyCompromised);
+            }
         }
     }
 

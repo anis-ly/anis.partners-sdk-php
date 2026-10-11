@@ -9,11 +9,10 @@ use Anis\Partners\Signing\SignatureProfile;
 /**
  * Holds the closed route set so contract drift can be checked in both directions.
  *
- * Each route states whether Anis signs its answers. Only the answers that move money, deliver card codes, or establish
- * a key are signed — orders, reveals, enrolment, and the signature self-check — and on those routes every answer,
+ * Each route states whether Anis signs its answers. Only the answers that move money, deliver card codes, stop access, or establish
+ * a key are signed — orders, reveals, access stops, enrolment, and the signature self-check — and on those routes every answer,
  * success and refusal, is verified. The information reads (profile, wallets, catalogue, owned-card lists) and the
- * signing-key document are not signed by Anis, so their answers are passed through unverified. Every request is
- * still signed exactly as before.
+ * signing-key document are not signed by Anis, so their answers are passed through unverified. Partner requests carry a signature; enrollment uses its token and proof.
  */
 final class PartnerRoutes
 {
@@ -21,6 +20,9 @@ final class PartnerRoutes
     public static function all(): array
     {
         return [
+            new PartnerRoute('POST', '/v1/application/suspend', SignatureProfile::BodylessNonceMutation, true),
+            new PartnerRoute('POST', '/v1/keys/{keyId}/revoke', SignatureProfile::BodylessNonceMutation, true),
+            new PartnerRoute('GET', '/v1/wallets/{walletId}/catalog/cards/{cardId}', SignatureProfile::SafeRead, false),
             new PartnerRoute('GET', '/v1/profile', SignatureProfile::SafeRead, false),
             new PartnerRoute('GET', '/v1/wallets', SignatureProfile::SafeRead, false),
             new PartnerRoute('GET', '/v1/wallets/{walletId}', SignatureProfile::SafeRead, false),
@@ -30,10 +32,10 @@ final class PartnerRoutes
             new PartnerRoute('GET', '/v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}/cards', SignatureProfile::SafeRead, false),
             new PartnerRoute('POST', '/v1/wallets/{walletId}/orders', SignatureProfile::OrderMutation, true),
             new PartnerRoute('GET', '/v1/orders/{operationId}', SignatureProfile::SafeRead, true),
-            new PartnerRoute('GET', '/v1/wallets/{walletId}/cards', SignatureProfile::SafeRead, false),
-            new PartnerRoute('GET', '/v1/wallets/{walletId}/cards/{soldCardId}', SignatureProfile::SafeRead, false),
-            new PartnerRoute('POST', '/v1/wallets/{walletId}/cards/{soldCardId}/reveal', SignatureProfile::BodylessNonceMutation, true),
-            new PartnerRoute('POST', '/v1/wallets/{walletId}/invoices/{invoiceId}/cards/reveal', SignatureProfile::BodylessNonceMutation, true),
+            new PartnerRoute('GET', '/v1/wallets/{walletId}/owned-cards', SignatureProfile::SafeRead, false),
+            new PartnerRoute('GET', '/v1/wallets/{walletId}/owned-cards/{soldCardId}', SignatureProfile::SafeRead, false),
+            new PartnerRoute('POST', '/v1/wallets/{walletId}/owned-cards/{soldCardId}/reveal', SignatureProfile::BodylessNonceMutation, true),
+            new PartnerRoute('POST', '/v1/wallets/{walletId}/invoices/{invoiceId}/owned-cards/reveal', SignatureProfile::BodylessNonceMutation, true),
             new PartnerRoute('POST', '/v1/diagnostics/signature', SignatureProfile::BodylessNonceMutation, true),
             new PartnerRoute('GET', '/v1/enrollments/{invitationId}', null, true),
             new PartnerRoute('POST', '/v1/enrollments/{invitationId}/keys', null, true),

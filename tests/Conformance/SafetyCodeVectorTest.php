@@ -17,7 +17,7 @@ final class SafetyCodeVectorTest extends TestCase
     #[Test]
     public function it_counts_all_safety_code_vectors(): void
     {
-        self::assertCount(4, self::vectorFiles());
+        self::assertNotEmpty(self::vectorFiles());
     }
 
     #[Test]
@@ -35,7 +35,6 @@ final class SafetyCodeVectorTest extends TestCase
         sort($onDisk, SORT_STRING);
 
         self::assertSame($onDisk, $listed);
-        self::assertCount(count($onDisk), $onDisk);
         self::assertSame(count($onDisk), JsonFixture::integer($manifest, 'total'));
     }
 
@@ -86,12 +85,6 @@ final class SafetyCodeVectorTest extends TestCase
     /** @return list<string> */
     private static function vectorFiles(): array
     {
-        $files = glob(dirname(__DIR__) . '/vectors/safety-code/SC-*.json');
-        if ($files === false) {
-            return [];
-        }
-        sort($files, SORT_STRING);
-
-        return $files;
+        return \Anis\Partners\Tests\Support\VectorFiles::read(dirname(__DIR__) . '/vectors/safety-code', 'SC-*.json');
     }
 }

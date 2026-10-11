@@ -12,6 +12,10 @@ enum ResponseVerificationFailure: string
     case SignatureInvalid = 'signature_invalid';
     case ContentDigestMismatch = 'content_digest_mismatch';
     case CoveredComponentsMismatch = 'covered_components_mismatch';
+    case ProfileUnexpected = 'profile_unexpected';
+    case KeyCompromised = 'key_compromised';
+    case KeyRetired = 'key_retired';
+    case KeyNotYetValid = 'key_not_yet_valid';
     case UnknownKey = 'unknown_key';
     case KeyRejected = 'key_rejected';
     case AlgorithmNotSupported = 'algorithm_not_supported';

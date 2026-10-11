@@ -21,6 +21,9 @@ final readonly class PartnerJwk
         public ?string $alg = null,
         #[\SensitiveParameter]
         ?string $d = null,
+        public ?string $status = null,
+        public ?\DateTimeImmutable $notBefore = null,
+        public ?\DateTimeImmutable $retiredAt = null,
     ) {
         $this->hasPrivateMember = $d !== null && $d !== '';
     }
@@ -43,7 +46,13 @@ final readonly class PartnerJwk
             $strings[$member] = $item;
         }
 
-        return new self(...$strings);
+        $status = $value['status'] ?? null;
+        if ($status !== null && !in_array($status, ['active', 'next', 'retired'], true)) {
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('A signing-key status is invalid.');
+        }
+        return new self(...[...$strings, 'status' => $status,
+            'notBefore' => \Anis\Partners\Models\ModelData::dateTime($value, 'notBefore'),
+            'retiredAt' => \Anis\Partners\Models\ModelData::dateTime($value, 'retiredAt')]);
     }
 
     /**

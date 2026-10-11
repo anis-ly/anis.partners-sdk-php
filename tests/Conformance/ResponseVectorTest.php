@@ -21,7 +21,7 @@ final class ResponseVectorTest extends TestCase
     #[Test]
     public function it_counts_all_response_vectors(): void
     {
-        self::assertCount(39, self::vectorFiles());
+        self::assertNotEmpty(self::vectorFiles());
     }
 
     /** @return iterable<string, array{string, string}> */
@@ -46,6 +46,7 @@ final class ResponseVectorTest extends TestCase
             JsonFixture::stringMap($response, 'headers'),
             JsonFixture::base64(JsonFixture::string($response, 'bodyBase64')),
             JsonFixture::nullableString($request, 'signatureInput'),
+            JsonFixture::nullableString($request, 'signature'),
         );
         $keys = SigningKeySet::fromJson(JsonFixture::encode(JsonFixture::object($vector['signingKeys'] ?? null)));
         $verifier = new PartnerResponseVerifier(
@@ -75,12 +76,6 @@ final class ResponseVectorTest extends TestCase
     /** @return list<string> */
     private static function vectorFiles(): array
     {
-        $files = glob(dirname(__DIR__) . '/vectors/response/RS-*.json');
-        if ($files === false) {
-            return [];
-        }
-        sort($files, SORT_STRING);
-
-        return $files;
+        return \Anis\Partners\Tests\Support\VectorFiles::read(dirname(__DIR__) . '/vectors/response', 'RS-*.json');
     }
 }

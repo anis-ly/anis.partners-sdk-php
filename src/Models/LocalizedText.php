@@ -11,6 +11,12 @@ final readonly class LocalizedText implements \JsonSerializable
 
     public function __construct(public ?string $ar = null, public ?string $en = null) {}
 
+    /** @return array<string, string> */
+    public function jsonSerialize(): array
+    {
+        return array_filter(['ar' => $this->ar, 'en' => $this->en], static fn(?string $text): bool => $text !== null && $text !== '');
+    }
+
     /**
      * Reads the optional translations without inventing a missing language.
      * @param array<array-key, mixed> $data

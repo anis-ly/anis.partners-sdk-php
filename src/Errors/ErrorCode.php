@@ -27,6 +27,7 @@ enum ErrorCode: string
     case InvitationInvalid = 'invitation_invalid';
     case InvoiceRevealLimitExceeded = 'invoice_reveal_limit_exceeded';
     case KeyDuplicate = 'key_duplicate';
+    case KeyNotRevocable = 'key_not_revocable';
     case KeyProofInvalid = 'key_proof_invalid';
     case MalformedSignedRequest = 'malformed_signed_request';
     case OperationProcessing = 'operation_processing';

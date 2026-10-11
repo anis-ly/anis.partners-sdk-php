@@ -487,7 +487,7 @@ function main(array $argv): int
             if (!$item instanceof MaskedCard) {
                 throw new RuntimeException('An owned-card page contained an unexpected value.');
             }
-            show(['id' => $item->id, 'card' => $item->card, 'credentialAvailable' => $item->credentialAvailable]);
+            show(['soldCardId' => $item->soldCardId, 'card' => $item->card, 'credentialAvailable' => $item->credentialAvailable]);
         } break;
         case 'owned-card': show($client->ownedCards()->get(argument($args, 0, 'wallet id'), argument($args, 1, 'sold card id')));
             break;
@@ -572,8 +572,8 @@ function main(array $argv): int
                     if (!$ownedCard instanceof MaskedCard) {
                         throw new RuntimeException('An owned-card page contained an unexpected value.');
                     }
-                    show(['id' => $ownedCard->id, 'credentialAvailable' => $ownedCard->credentialAvailable]);
-                    show($client->ownedCards()->get($firstWallet->id, $ownedCard->id));
+                    show(['soldCardId' => $ownedCard->soldCardId, 'credentialAvailable' => $ownedCard->credentialAvailable]);
+                    show($client->ownedCards()->get($firstWallet->id, $ownedCard->soldCardId));
                     break;
                 }
             }

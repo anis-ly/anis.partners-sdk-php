@@ -22,6 +22,8 @@ final readonly class VerifiableResponse
         public string $body,
         #[\SensitiveParameter]
         public ?string $requestSignatureInput,
+        #[\SensitiveParameter]
+        public ?string $requestSignature,
     ) {
         $normalized = [];
         foreach ($headers as $name => $value) {

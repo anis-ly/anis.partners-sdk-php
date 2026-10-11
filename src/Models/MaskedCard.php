@@ -10,18 +10,16 @@ final readonly class MaskedCard implements \JsonSerializable
     use WireJsonSerialization;
 
     public function __construct(
-        public string $id,
-        public ?string $orderOperationId = null,
+        public string $soldCardId,
+        public ?string $operationId = null,
         public ?string $invoiceId = null,
-        public ?MaskedCardProduct $card = null,
+        public ?int $invoiceNumber = null,
+        public ?CardSummary $card = null,
         public ?string $serialNumberMasked = null,
         public bool $credentialAvailable = false,
         public ?\DateTimeImmutable $purchasedAt = null,
         public ?Money $unitPrice = null,
         public ?string $expiryDate = null,
-        public ?int $invoiceNumber = null,
-        public ?string $faceValue = null,
-        public ?MaskedCardSubcategory $subcategory = null,
     ) {}
 
     /**
@@ -31,22 +29,19 @@ final readonly class MaskedCard implements \JsonSerializable
     public static function fromArray(array $data): self
     {
         $card = ModelData::object($data, 'card');
-        $subcategory = ModelData::object($data, 'subcategory');
         $price = ModelData::object($data, 'unitPrice');
 
         return new self(
-            ModelData::uuid($data, 'id'),
-            ModelData::nullableUuid($data, 'orderOperationId'),
+            ModelData::uuid($data, 'soldCardId'),
+            ModelData::nullableUuid($data, 'operationId'),
             ModelData::nullableUuid($data, 'invoiceId'),
-            $card === null ? null : MaskedCardProduct::fromArray($card),
+            ModelData::nullableInteger($data, 'invoiceNumber'),
+            $card === null ? null : CardSummary::fromArray($card),
             ModelData::nullableString($data, 'serialNumberMasked'),
             ModelData::boolean($data, 'credentialAvailable'),
             ModelData::dateTime($data, 'purchasedAt'),
             $price === null ? null : Money::fromArray($price),
             ModelData::date($data, 'expiryDate'),
-            ModelData::nullableInteger($data, 'invoiceNumber'),
-            ModelData::nullableString($data, 'faceValue'),
-            $subcategory === null ? null : MaskedCardSubcategory::fromArray($subcategory),
         );
     }
 }

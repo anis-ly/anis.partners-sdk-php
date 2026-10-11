@@ -93,7 +93,7 @@ final class WalletController
     {
         $wallets = [];
         foreach ($anis->wallets()->list() as $wallet) {
-            $wallets[] = ['id' => $wallet->id, 'name' => $wallet->name, 'balance' => $wallet->balance->amount()];
+            $wallets[] = ['id' => $wallet->id, 'name' => $wallet->name, 'balance' => $wallet->balance?->amount()];
         }
 
         return $wallets;

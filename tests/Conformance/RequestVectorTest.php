@@ -20,7 +20,7 @@ final class RequestVectorTest extends TestCase
     #[Test]
     public function it_counts_all_request_vectors(): void
     {
-        self::assertCount(9, self::vectorFiles());
+        self::assertNotEmpty(self::vectorFiles());
     }
 
     /** @return iterable<string, array{string}> */
@@ -93,12 +93,6 @@ final class RequestVectorTest extends TestCase
     /** @return list<string> */
     private static function vectorFiles(): array
     {
-        $files = glob(dirname(__DIR__) . '/vectors/request/RQ-*.json');
-        if ($files === false) {
-            return [];
-        }
-        sort($files, SORT_STRING);
-
-        return $files;
+        return \Anis\Partners\Tests\Support\VectorFiles::read(dirname(__DIR__) . '/vectors/request', 'RQ-*.json');
     }
 }

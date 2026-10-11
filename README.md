@@ -1,7 +1,9 @@
 # Anis Partner SDK for PHP
 
+Version **2.0.0**. **1.x is deprecated — upgrade.**
+
 The PHP client for the Anis Partner API. It signs every request, verifies every answer Anis signs — orders, card
-reveals, enrollment and the signature self-check — and returns typed operations and order outcomes. Verified end to end against a live Anis environment (October 2026).
+reveals, access stops, enrollment and the signature self-check — and returns typed operations and order outcomes. See [test coverage](tests/PARITY.md) for local verification evidence.
 
 > **Disclaimer.** This SDK is an optional helper provided free of charge under the MIT License, "as is", without
 > warranty of any kind. Anis (Aniscom for Technical Services) accepts no responsibility or liability for its use or for
@@ -14,7 +16,7 @@ Requires PHP 8.2–8.5 and OpenSSL. Install the package and one PSR-18 HTTP clie
 installed PSR-18 client and PSR-17 factories when you create the client.
 
 ```bash
-composer require anis-ly/partners guzzlehttp/guzzle
+composer require anis-ly/partners:^2.0 guzzlehttp/guzzle
 ```
 
 Alternatively install `symfony/http-client` and `nyholm/psr7` as your HTTP client and message implementation.
@@ -46,7 +48,7 @@ foreach ($client->wallets()->list() as $wallet) {
     if (!$wallet instanceof \Anis\Partners\Models\Wallet) {
         throw new RuntimeException('A wallet page contained an unexpected value.');
     }
-    printf("%s %s\n", $wallet->name ?? $wallet->id, $wallet->balance->amount());
+    printf("%s %s\n", $wallet->name ?? $wallet->id, $wallet->balance?->amount() ?? 'unavailable');
 }
 
 // Generate a fresh random UUID v4 per purchase and persist it with the exact request before create().
@@ -79,18 +81,38 @@ match (true) {
 Read [Getting started](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/getting-started.md) before enrolling a key, then read [Orders and recovery](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/orders-and-recovery.md)
 before moving money. Using Laravel? See [Using the SDK with Laravel](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/laravel.md). The PHP example is in [samples/console](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/samples/console/README.md).
 
+## Catalogue and access stops
+
+```php
+$cardId = 'b672ca4e-c751-4507-8069-326496525a98';
+$soldCardId = '4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046';
+$otherKeyId = '7a1c3e5f-2b4d-4f68-8a0c-9e1b3d5f7a2c';
+$card = $client->catalogue()->getCard($walletId, $cardId);
+$owned = $client->ownedCards()->get($walletId, $soldCardId);
+$name = $owned->card?->name?->en;
+$currency = $client->wallets()->get($walletId)->balance?->currency;
+
+$revoked = $client->access()->revokeKey($otherKeyId, 'Key custody incident');
+$suspended = $client->access()->suspendApplication('Emergency maintenance');
+// Staff must resume a suspended application before it can send further admitted requests.
+```
+
+`MaskedCard` exposes `soldCardId`, `operationId`, invoice details and a shared `CardSummary` containing face value,
+logo, subcategory and category. Reveals and order `soldCards` use `RevealedCredential` with the same summary.
+Catalogue quantity limits are a minimum of 1 and a platform maximum of 100. Wallet currency is `balance.currency`.
+
 ## Refusals built into the design
 
 - You provide and persist the order id; a new id after a timeout could make a second purchase.
 - Five explicit result types distinguish completed, processing, replayed, not placed, and unknown orders.
 - Credentials are available on the first completion only; later recovery uses the same id and never silently buys again.
-- On a route whose answers Anis signs (orders, reveals, enrollment, the signature self-check), an answer that is unsigned or fails verification is discarded — success and refusal alike. Verification cannot be disabled.
+- On a route whose answers Anis signs (orders, reveals, access stops, enrollment, the signature self-check), an answer that is unsigned or fails verification is discarded — success and refusal alike. Verification cannot be disabled.
 - Information reads — profile, wallets, catalogue, and owned-card lists and details — are not signed by Anis, so the SDK returns them without verifying a signature; HTTPS protects them. They never fetch Anis's signing keys, so they keep working while those keys cannot be fetched. See [Routes and permissions](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/routes-and-permissions.md).
 - The private key stays behind `P256Signer`; the included PEM signer is for PEM files readable only by the application user, and a KMS/HSM signer can implement the same interface.
 
 ## Coverage and proof
 
-The client covers profile, wallet, catalogue, order, owned-card, reveal, diagnostic, enrollment, and response-key routes. Set timeouts and disable redirects on your PSR-18 HTTP client; signed partner requests must not be silently replayed to another location.
+The client covers profile, wallet, catalogue, order, owned-card, reveal, diagnostic, access-stop, enrollment, and response-key routes. Set timeouts and disable redirects on your PSR-18 HTTP client; signed partner requests must not be silently replayed to another location.
 Conformance tests use the published request, response, safety-code, and enrollment vectors. Contract tests compare route paths, signature kinds, which routes' answers are signed, public error codes, enrollment fields, and signature-component order with the checked-in contracts. The repository sample is excluded from Composer archives; clone the repository or copy the sample into your application and update its autoload path.
 
 Typed error cases are generated from `contracts/error-catalogue.json`. Run `php tools/generate-errors.php` from a repository clone when updating the generated enum; the generator is not included in Composer archives.

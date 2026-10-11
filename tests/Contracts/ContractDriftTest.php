@@ -142,10 +142,12 @@ final class ContractDriftTest extends TestCase
     {
         // The gateway's catalogue (PartnerRoute.SignsResponse) is the authority; its answers on these routes are signed.
         $signed = [
+            'POST /v1/application/suspend',
+            'POST /v1/keys/{keyId}/revoke',
             'POST /v1/wallets/{walletId}/orders',
             'GET /v1/orders/{operationId}',
-            'POST /v1/wallets/{walletId}/cards/{soldCardId}/reveal',
-            'POST /v1/wallets/{walletId}/invoices/{invoiceId}/cards/reveal',
+            'POST /v1/wallets/{walletId}/owned-cards/{soldCardId}/reveal',
+            'POST /v1/wallets/{walletId}/invoices/{invoiceId}/owned-cards/reveal',
             'GET /v1/enrollments/{invitationId}',
             'POST /v1/enrollments/{invitationId}/keys',
             'POST /v1/enrollments/{invitationId}/proof',
@@ -153,6 +155,7 @@ final class ContractDriftTest extends TestCase
             'POST /v1/diagnostics/signature',
         ];
         $unsigned = [
+            'GET /v1/wallets/{walletId}/catalog/cards/{cardId}',
             'GET /v1/profile',
             'GET /v1/wallets',
             'GET /v1/wallets/{walletId}',
@@ -160,8 +163,8 @@ final class ContractDriftTest extends TestCase
             'GET /v1/wallets/{walletId}/catalog/categories/{categoryId}/subcategories',
             'GET /v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}',
             'GET /v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}/cards',
-            'GET /v1/wallets/{walletId}/cards',
-            'GET /v1/wallets/{walletId}/cards/{soldCardId}',
+            'GET /v1/wallets/{walletId}/owned-cards',
+            'GET /v1/wallets/{walletId}/owned-cards/{soldCardId}',
             'GET /.well-known/partner-signing-keys.json',
         ];
         $sdkSigned = [];

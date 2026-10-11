@@ -12,8 +12,7 @@ final readonly class Wallet implements \JsonSerializable
     public function __construct(
         public string $id,
         public ?string $name = null,
-        public ?string $currency = null,
-        public Money $balance = new Money(0, ''),
+        public ?Money $balance = null,
     ) {}
 
     /**
@@ -27,8 +26,7 @@ final readonly class Wallet implements \JsonSerializable
         return new self(
             ModelData::uuid($data, 'id'),
             ModelData::nullableString($data, 'name'),
-            ModelData::nullableString($data, 'currency'),
-            $balance === null ? new Money(0, '') : Money::fromArray($balance),
+            $balance === null ? null : Money::fromArray($balance),
         );
     }
 }

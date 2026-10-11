@@ -70,6 +70,14 @@ final class CatalogueOperations extends AbstractOperations
         return $this->fetchModel($this->transport, '/v1/wallets/{walletId}/catalog/subcategories/{subcategoryId}', 'v1/wallets/' . Uuid::canonical($walletId, 'wallet id') . '/catalog/subcategories/' . $id, [CatalogueSubcategory::class, 'fromArray']);
     }
 
+    /** Reads one wallet-priced catalogue card. */
+    public function getCard(string $walletId, string $cardId): CatalogueCard
+    {
+        $path = 'v1/wallets/' . Uuid::canonical($walletId, 'wallet id') . '/catalog/cards/' . Uuid::canonical($cardId, 'card id');
+        /** @var CatalogueCard */
+        return $this->fetchModel($this->transport, '/v1/wallets/{walletId}/catalog/cards/{cardId}', $path, [CatalogueCard::class, 'fromArray']);
+    }
+
     /** Walks all card pages, returning the price shown for this wallet. @return \Generator<int, CatalogueCard> */
     public function listCards(string $walletId, string $subcategoryId): \Generator
     {

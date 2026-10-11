@@ -113,7 +113,8 @@ final class PartnerTransport
                 AnisPartnersTelemetry::signatureDuration((microtime(true) - $signingStarted) * 1000, $profile->value, $this->options->name);
             }
 
-            $request = $request->withHeader('Accept-Encoding', 'identity');
+            $request = $request->withHeader('Accept-Encoding', 'identity')
+                ->withHeader('User-Agent', 'anis-partners-php/' . \Anis\Partners\AnisPartnersClient::VERSION);
 
             $started = microtime(true);
             $handedToHttp = true;
@@ -135,7 +136,7 @@ final class PartnerTransport
             // an information route's answer is not verified even if a signature header happens to be present.
             if (PartnerRoutes::signsResponse($method, $template)) {
                 $sentSignatureInput = $request->getHeaderLine('Signature-Input');
-                $this->verifier->verify(new VerifiableResponse($response->getStatusCode(), $headers, $bytes, $sentSignatureInput === '' ? null : $sentSignatureInput));
+                $this->verifier->verify(new VerifiableResponse($response->getStatusCode(), $headers, $bytes, $sentSignatureInput === '' ? null : $sentSignatureInput, $request->getHeaderLine('Signature') === '' ? null : $request->getHeaderLine('Signature')));
             }
             $elapsed = (microtime(true) - $started) * 1000;
             AnisPartnersTelemetry::setAttribute($span, 'http.response.status_code', $statusCode);
