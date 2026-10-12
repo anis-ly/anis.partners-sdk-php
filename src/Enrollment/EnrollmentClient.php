@@ -51,8 +51,8 @@ final class EnrollmentClient
         $requests ??= Psr17FactoryDiscovery::findRequestFactory();
         $streams ??= Psr17FactoryDiscovery::findStreamFactory();
         $clock ??= new \Anis\Partners\Internal\SystemClock();
-        $options = new ClientOptions($authority, 60, AcceptLanguage::Unspecified, 600);
-        $keys = new HttpSigningKeySource($http, $requests, $authority, 600, $keyCache, $clock, $logger, $options->name);
+        $options = new ClientOptions($authority, 60, AcceptLanguage::Unspecified, ClientOptions::MAX_SIGNING_KEY_CACHE_SECONDS);
+        $keys = new HttpSigningKeySource($http, $requests, $authority, ClientOptions::MAX_SIGNING_KEY_CACHE_SECONDS, $keyCache, $clock, $logger, $options->name);
         $transport = (new PartnerTransport($http, $requests, $streams, $options, null, new PartnerResponseVerifier($keys, $clock, $logger, $options->name), $clock, $logger))
             ->withEnrollmentToken($enrollmentToken);
 

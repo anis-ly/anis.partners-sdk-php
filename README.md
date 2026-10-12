@@ -107,6 +107,7 @@ Catalogue quantity limits are a minimum of 1 and a platform maximum of 100. Wall
 - Five explicit result types distinguish completed, processing, replayed, not placed, and unknown orders.
 - Credentials are available on the first completion only; later recovery uses the same id and never silently buys again.
 - On a route whose answers Anis signs (orders, reveals, access stops, enrollment, the signature self-check), an answer that is unsigned or fails verification is discarded — success and refusal alike. Verification cannot be disabled.
+- The response-key document is cached for five minutes by default and at most five minutes. Retired keys stay published for 90 days after retirement, and compromised key ids remain in `revoked[]` for 90 days. See [Signing-key cache](docs/caching.md) and [Security](docs/security.md).
 - Information reads — profile, wallets, catalogue, and owned-card lists and details — are not signed by Anis, so the SDK returns them without verifying a signature; HTTPS protects them. They never fetch Anis's signing keys, so they keep working while those keys cannot be fetched. See [Routes and permissions](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/routes-and-permissions.md).
 - The private key stays behind `P256Signer`; the included PEM signer is for PEM files readable only by the application user, and a KMS/HSM signer can implement the same interface.
 

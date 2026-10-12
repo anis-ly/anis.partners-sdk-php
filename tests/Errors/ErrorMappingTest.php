@@ -39,6 +39,7 @@ final class ErrorMappingTest extends TestCase
             ErrorCode::CardUnavailable->value => [OutOfStockException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::OwnerLimitExceeded->value => [LimitExceededException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::DailyLimitExceeded->value => [LimitExceededException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::SpendingLimitExceeded->value => [LimitExceededException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::AllowedDebtConsentRequired->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::PurchaseNotAllowed->value => [AuthorizationException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::WalletDisabled->value => [AuthorizationException::class, OrderRefusalOutcome::NotPlaced],

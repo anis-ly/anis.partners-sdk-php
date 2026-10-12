@@ -72,7 +72,7 @@ $options = ClientOptions::fromArray([
     'authority' => 'https://partners.example',
     'signatureLifetimeSeconds' => 60,
     'acceptLanguage' => 'Arabic',
-    'signingKeyCacheSeconds' => 600,
+    'signingKeyCacheSeconds' => 300,
 ]);
 $signer = PemP256Signer::fromPemFile('/secure/partner-key.pem')->forKey($keyId);
 $client = AnisPartnersClient::create($options, $signer);

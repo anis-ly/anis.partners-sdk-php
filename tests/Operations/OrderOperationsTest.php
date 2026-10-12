@@ -6,7 +6,10 @@ namespace Anis\Partners\Tests\Operations;
 
 use Anis\Partners\AnisPartnersClient;
 use Anis\Partners\ClientOptions;
+use Anis\Partners\Errors\ErrorCode;
 use Anis\Partners\Errors\InsufficientBalanceException;
+use Anis\Partners\Errors\LimitExceededException;
+use Anis\Partners\Errors\OrderRefusalOutcome;
 use Anis\Partners\Errors\PriceChangedException;
 use Anis\Partners\Models\CreateOrderRequest;
 use Anis\Partners\Models\Money;
@@ -192,6 +195,24 @@ final class OrderOperationsTest extends TestCase
 
         self::assertInstanceOf(OrderOutcomeUnknown::class, $result);
         self::assertSame(30, $result->suggestedDelaySeconds);
+    }
+
+    #[Test]
+    public function it_reports_a_spending_capped_order_as_not_placed_with_the_signed_retry_after(): void
+    {
+        $wire = new SignedFakeWire();
+        $wire->status = 429;
+        $wire->body = '{"status":429,"code":"spending_limit_exceeded"}';
+        $wire->responseHeaders = ['X-Request-Id' => 'spend-test', 'Retry-After' => '3600'];
+        $result = self::client($wire)->orders()->create(self::WALLET, self::OPERATION, self::order());
+
+        self::assertInstanceOf(OrderNotPlaced::class, $result);
+        self::assertInstanceOf(LimitExceededException::class, $result->refusal);
+        self::assertSame(ErrorCode::SpendingLimitExceeded, $result->refusal->errorCode);
+        self::assertSame(429, $result->refusal->status);
+        self::assertSame(3600, $result->refusal->retryAfter);
+        self::assertSame(OrderRefusalOutcome::NotPlaced, $result->refusal->orderOutcome);
+        self::assertFalse($result->refusal->isRetryable);
     }
 
     #[Test]

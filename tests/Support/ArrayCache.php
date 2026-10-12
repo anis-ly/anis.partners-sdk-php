@@ -11,6 +11,8 @@ final class ArrayCache implements CacheInterface
 {
     /** @var array<string, mixed> */
     private array $values = [];
+    /** @var array<string, null|int|DateInterval> */
+    public array $ttls = [];
 
     public function get(string $key, mixed $default = null): mixed
     {
@@ -20,6 +22,7 @@ final class ArrayCache implements CacheInterface
     public function set(string $key, mixed $value, null|int|DateInterval $ttl = null): bool
     {
         $this->values[$key] = $value;
+        $this->ttls[$key] = $ttl;
 
         return true;
     }
@@ -27,6 +30,7 @@ final class ArrayCache implements CacheInterface
     public function delete(string $key): bool
     {
         unset($this->values[$key]);
+        unset($this->ttls[$key]);
 
         return true;
     }
@@ -34,6 +38,7 @@ final class ArrayCache implements CacheInterface
     public function clear(): bool
     {
         $this->values = [];
+        $this->ttls = [];
 
         return true;
     }

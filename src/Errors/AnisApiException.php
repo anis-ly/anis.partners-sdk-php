@@ -102,7 +102,7 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
             ErrorCode::QuantityUnavailable, ErrorCode::CardUnavailable => OutOfStockException::class,
             ErrorCode::IdempotencyConflict => IdempotencyConflictException::class,
             ErrorCode::RateLimited => RateLimitedException::class,
-            ErrorCode::OwnerLimitExceeded, ErrorCode::DailyLimitExceeded => LimitExceededException::class,
+            ErrorCode::OwnerLimitExceeded, ErrorCode::DailyLimitExceeded, ErrorCode::SpendingLimitExceeded => LimitExceededException::class,
             ErrorCode::InvalidCredentials, ErrorCode::SignatureExpired => InvalidCredentialsException::class,
             ErrorCode::ReplayDetected => ReplayDetectedException::class,
             ErrorCode::InsufficientScope,

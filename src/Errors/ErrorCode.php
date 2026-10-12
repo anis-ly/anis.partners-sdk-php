@@ -42,6 +42,7 @@ enum ErrorCode: string
     case RevealNotAllowed = 'reveal_not_allowed';
     case SignatureExpired = 'signature_expired';
     case SourceIpNotAllowed = 'source_ip_not_allowed';
+    case SpendingLimitExceeded = 'spending_limit_exceeded';
     case ValidationFailed = 'validation_failed';
     case WalletDisabled = 'wallet_disabled';
     case WalletExpired = 'wallet_expired';
