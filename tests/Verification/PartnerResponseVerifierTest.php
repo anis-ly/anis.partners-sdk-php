@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace Anis\Partners\Tests\Verification;
 
+use Anis\Partners\Tests\Support\FakeHttpClient;
 use Anis\Partners\Tests\Support\FrozenClock;
 use Anis\Partners\Tests\Support\JsonFixture;
 use Anis\Partners\Tests\Support\StaticSigningKeySource;
+use Anis\Partners\Verification\HttpSigningKeySource;
 use Anis\Partners\Verification\PartnerJwk;
 use Anis\Partners\Verification\PartnerResponseVerifier;
 use Anis\Partners\Verification\ResponseVerificationFailure;
 use Anis\Partners\Verification\SigningKeySet;
 use Anis\Partners\Verification\UnverifiableResponseException;
 use Anis\Partners\Verification\VerifiableResponse;
+use GuzzleHttp\Psr7\HttpFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -58,6 +61,29 @@ final class PartnerResponseVerifierTest extends TestCase
         }
         self::assertSame(1, $source->getCalls);
         self::assertSame(1, $source->refreshCalls);
+    }
+
+    #[Test]
+    public function it_refuses_an_unknown_key_inside_the_http_source_cooldown_without_a_second_refetch(): void
+    {
+        $vector = self::vector();
+        $clock = new FrozenClock(JsonFixture::integer($vector, 'verifyAt'));
+        $client = new FakeHttpClient();
+        $source = new HttpSigningKeySource($client, new HttpFactory(), 'https://partners.example', clock: $clock, monotonicClock: $clock->monotonicNow(...));
+        $verifier = new PartnerResponseVerifier($source, $clock);
+
+        foreach ([0, 1, 30] as $attempt) {
+            if ($attempt === 30) {
+                $clock->advance(30);
+            }
+            try {
+                $verifier->verify(self::response($vector));
+                self::fail('An unknown signing key must discard the answer.');
+            } catch (UnverifiableResponseException $error) {
+                self::assertSame(ResponseVerificationFailure::UnknownKey, $error->failure());
+            }
+            self::assertSame($attempt === 30 ? 3 : 2, $client->calls);
+        }
     }
 
     #[Test]
@@ -145,6 +171,60 @@ final class PartnerResponseVerifierTest extends TestCase
         try {
             $verifier->verify(self::response($vector));
             self::fail('The key lifecycle must reject this answer.');
+        } catch (UnverifiableResponseException $error) {
+            self::assertSame($failure, $error->failure());
+            self::assertSame(0, $source->refreshCalls);
+        }
+    }
+
+    /** @return iterable<string, array{string, int, ?ResponseVerificationFailure, 3?: int}> */
+    public static function notBeforeCases(): iterable
+    {
+        foreach (['active', 'next', 'retired'] as $status) {
+            yield $status . ' before notBefore' => [$status, 1, ResponseVerificationFailure::KeyNotYetValid];
+            yield $status . ' at notBefore' => [$status, 0, null];
+            yield $status . ' one ten-thousandth of a second after creation' => [$status, 0, ResponseVerificationFailure::KeyNotYetValid, 100];
+            yield $status . ' fractional notBefore in the preceding second' => [$status, -1, null, 999999];
+        }
+        yield 'unsupported status before notBefore' => ['unsupported', 1, ResponseVerificationFailure::KeyRejected];
+    }
+
+    #[Test]
+    #[DataProvider('notBeforeCases')]
+    public function it_refuses_any_published_key_used_before_its_not_before(string $status, int $offset, ?ResponseVerificationFailure $failure, int $microseconds = 0): void
+    {
+        $vector = self::vector();
+        $document = JsonFixture::object($vector['signingKeys'] ?? null);
+        $keys = JsonFixture::objectList($document, 'keys');
+        $created = JsonFixture::integer($vector, 'verifyAt');
+        $keys[0]['status'] = $status;
+        $keys[0]['notBefore'] = gmdate('Y-m-d\TH:i:s', $created + $offset) . sprintf('.%06dZ', $microseconds);
+        if ($status === 'retired') {
+            $keys[0]['retiredAt'] = gmdate('Y-m-d\TH:i:s\Z', $created + 100);
+        }
+        $document['keys'] = $keys;
+        if ($status === 'unsupported') {
+            $key = $keys[0];
+            $keySet = new SigningKeySet([new PartnerJwk(
+                x: JsonFixture::string($key, 'x'),
+                y: JsonFixture::string($key, 'y'),
+                kid: JsonFixture::string($key, 'kid'),
+                status: $status,
+                notBefore: new \DateTimeImmutable(JsonFixture::string($key, 'notBefore')),
+            )]);
+        } else {
+            $keySet = SigningKeySet::fromJson(JsonFixture::encode($document));
+        }
+        $source = new StaticSigningKeySource($keySet);
+        $verifier = new PartnerResponseVerifier($source, new FrozenClock($created));
+        if ($failure === null) {
+            $verifier->verify(self::response($vector));
+            self::assertSame(0, $source->refreshCalls);
+            return;
+        }
+        try {
+            $verifier->verify(self::response($vector));
+            self::fail('Every published key must be valid when the answer is signed.');
         } catch (UnverifiableResponseException $error) {
             self::assertSame($failure, $error->failure());
             self::assertSame(0, $source->refreshCalls);

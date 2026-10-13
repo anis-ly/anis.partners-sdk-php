@@ -110,7 +110,7 @@ with the PHP test that demonstrates the behavior, or `n/a — <reason>` when the
 | `A_replayed_refusal_is_not_counted_as_an_unknown_order` | ObservabilityTest::it_logs_a_verified_refusal_with_its_code_and_request_id |
 | `No_secret_reaches_any_telemetry_signal` | ObservabilityTest::it_records_non_empty_telemetry_without_revealing_order_secrets; ObservabilityTest::it_keeps_known_nonce_and_signature_base_out_of_signing_exception_chains |
 
-## OrderOutcomeTests (25)
+## OrderOutcomeTests (26)
 
 | .NET test | PHP |
 |---|---|
@@ -127,6 +127,7 @@ with the PHP test that demonstrates the behavior, or `n/a — <reason>` when the
 | `A_202_is_processing_and_reports_when_to_resume` | OrderOperationsTest::it_classifies_signed_order_answers (data provider) |
 | `A_price_change_is_not_placed_and_carries_its_typed_refusal` | OrderOperationsTest::it_keeps_a_price_change_as_a_typed_closed_refusal |
 | `A_rate_limited_create_leaves_the_order_open_and_carries_the_signed_retry_after` | OrderOperationsTest::it_uses_retry_after_when_a_create_is_rate_limited |
+| `A_spending_capped_order_is_not_placed_and_carries_the_signed_retry_after` | OrderOperationsTest::it_reports_a_spending_capped_order_as_not_placed_with_the_signed_retry_after |
 | `A_rate_limited_create_without_a_retry_after_suggests_the_default_delay` | OrderOperationsTest::it_classifies_signed_order_answers (data provider) |
 | `A_fresh_refusal_of_a_resume_leaves_the_order_open` | OrderOperationsTest::it_keeps_a_fresh_refusal_during_resume_unknown |
 | `A_refusal_at_the_door_on_create_leaves_the_order_open_and_suggests_a_minute` | OrderOperationsTest::it_uses_a_minute_to_recover_a_door_refusal |
@@ -222,8 +223,15 @@ non-loopback HTTP. PHP follows the review rule for both cases; no other wire con
 
 ## Security and card contract (2.0.0)
 
+| Behaviour | PHP |
+|---|---|
+| Every published key refuses signatures created before notBefore; equality is accepted | PartnerResponseVerifierTest::it_refuses_any_published_key_used_before_its_not_before (data provider) |
+| The key-document default and maximum lifetime are five minutes | ClientOptionsTest::it_uses_safe_defaults_and_allows_explicit_settings_to_override_them; ClientOptionsTest::it_refuses_a_key_cache_from_settings_longer_than_five_minutes; HttpSigningKeySourceTest::it_refuses_a_cache_lifetime_longer_than_five_minutes; HttpSigningKeySourceTest::it_keeps_the_document_for_five_minutes_by_default |
+| Unknown key ids re-fetch at most once per 30 seconds, including failures and clock rollback recovery | HttpSigningKeySourceTest::it_refetches_for_an_unknown_key_at_most_once_per_thirty_seconds; HttpSigningKeySourceTest::it_does_not_freeze_the_cooldown_when_the_clock_moves_back |
+| Shared key documents expire from their original fetch time | HttpSigningKeySourceTest::it_expires_a_shared_entry_five_minutes_after_its_original_fetch |
+
 - `PartnerResponseVerifierTest` uses freshly signed v2 fixtures for raw request binding, required tags, key compromise and lifecycle boundaries.
 - `AccessOperationsTest` checks stop paths, trimmed JSON reasons, nonce components, digest, user agent and typed answers.
 - `CardSummaryTest` checks full masked/reveal/order shapes, catalogue metadata, empty text omission and wallet currency.
-- The vector harness reads `request.signature` and validates a folder manifest when present. Request, response and enrollment folders currently have no manifest, so every matching file is enumerated without a fixed count.
-- Response vector JSON remains v1 pending orchestrator regeneration; its declared outcomes cannot pass v2 verification.
+- The vector harness reads `request.signature` and validates every supplied folder manifest against the files on disk.
+- Response-vector tests verify the supplied v2 answers; every-key notBefore boundaries also use freshly signed fixtures in `PartnerResponseVerifierTest`.

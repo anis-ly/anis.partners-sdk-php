@@ -6,6 +6,7 @@ namespace Anis\Partners\Tests;
 
 use Anis\Partners\AcceptLanguage;
 use Anis\Partners\ClientOptions;
+use Anis\Partners\Errors\AnisPartnersInvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -31,7 +32,8 @@ final class ClientOptionsTest extends TestCase
         $adjusted = ClientOptions::fromArray(['authority' => 'http://localhost:8000', 'signatureLifetimeSeconds' => 1, 'acceptLanguage' => 'English', 'name' => 'orders-worker']);
 
         self::assertSame(60, $defaults->signatureLifetimeSeconds);
-        self::assertSame(600, $defaults->signingKeyCacheSeconds);
+        self::assertSame(300, $defaults->signingKeyCacheSeconds);
+        self::assertSame(300, (new ClientOptions('https://partners.example'))->signingKeyCacheSeconds);
         self::assertNull($defaults->acceptLanguageHeader());
         self::assertSame('en', $adjusted->acceptLanguageHeader());
         self::assertSame('orders-worker', $adjusted->name);
@@ -81,12 +83,21 @@ final class ClientOptionsTest extends TestCase
     }
 
     #[Test]
+    public function it_refuses_a_key_cache_from_settings_longer_than_five_minutes(): void
+    {
+        $this->expectException(AnisPartnersInvalidArgumentException::class);
+        $this->expectExceptionMessage('ClientOptions::$signingKeyCacheSeconds must be from 1 to 300 seconds');
+        ClientOptions::fromArray(['authority' => 'https://partners.example', 'signingKeyCacheSeconds' => 301]);
+    }
+
+    #[Test]
     public function it_names_the_php_class_and_parameter_in_validation_messages(): void
     {
         foreach ([
             [static fn() => new ClientOptions('/relative'), '$authority'],
             [static fn() => new ClientOptions('https://partners.example', 61), '$signatureLifetimeSeconds'],
             [static fn() => new ClientOptions('https://partners.example', signingKeyCacheSeconds: 0), '$signingKeyCacheSeconds'],
+            [static fn() => new ClientOptions('https://partners.example', signingKeyCacheSeconds: 301), '$signingKeyCacheSeconds'],
         ] as [$construct, $parameter]) {
             try {
                 $construct();

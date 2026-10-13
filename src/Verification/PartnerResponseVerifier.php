@@ -95,7 +95,7 @@ final class PartnerResponseVerifier
         $this->rejectRevoked($document, $parsed['keyId']);
         $key = $this->resolve($document, $parsed['keyId']);
         if ($key === null) {
-            Log::write($this->logger ?? new NullLogger(), 'warning', 'Anis used an unknown signing key; refreshing once for key {key_id}', 1006, ['key_id' => $parsed['keyId']]);
+            Log::write($this->logger ?? new NullLogger(), 'warning', 'Anis used an unknown signing key; requesting a key-document refresh (at most once per 30 seconds) for key {key_id}', 1006, ['key_id' => $parsed['keyId']]);
             $document = $this->keys->refresh();
             $this->rejectRevoked($document, $parsed['keyId']);
             $key = $this->resolve($document, $parsed['keyId']);
@@ -109,15 +109,16 @@ final class PartnerResponseVerifier
             $this->fail(ResponseVerificationFailure::UnknownKey);
         }
 
-        if ($key->status === 'retired' && $key->retiredAt !== null && $parsed['created'] > (float) $key->retiredAt->format('U.u')) {
-            $this->fail(ResponseVerificationFailure::KeyRetired);
-        }
-        if ($key->status === 'next' && $key->notBefore !== null && $parsed['created'] < (float) $key->notBefore->format('U.u')) {
-            $this->fail(ResponseVerificationFailure::KeyNotYetValid);
-        }
-
         if (!in_array($key->status, ['active', 'next', 'retired'], true) || $key->notBefore === null || ($key->status === 'retired' && $key->retiredAt === null)) {
             $this->fail(ResponseVerificationFailure::KeyRejected);
+        }
+
+        if ($key->status === 'retired' && $parsed['created'] > (float) $key->retiredAt->format('U.u')) {
+            $this->fail(ResponseVerificationFailure::KeyRetired);
+        }
+        $notBefore = $key->notBefore->getTimestamp() + ($key->notBefore->format('u') === '000000' ? 0 : 1);
+        if ($parsed['created'] < $notBefore) {
+            $this->fail(ResponseVerificationFailure::KeyNotYetValid);
         }
 
         $signatureBytes = $this->signatureBytes($signature);

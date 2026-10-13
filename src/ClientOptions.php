@@ -7,12 +7,15 @@ namespace Anis\Partners;
 /** Holds only the authority and safe protocol settings needed to reach Anis. */
 final readonly class ClientOptions
 {
+    /** Longest time a fetched key document is trusted, so a withdrawn Anis key stops verifying answers within five minutes. */
+    public const MAX_SIGNING_KEY_CACHE_SECONDS = 300;
+
     /** Validates settings before a client can send a signed request. */
     public function __construct(
         public string $authority,
         public int $signatureLifetimeSeconds = 60,
         public AcceptLanguage $acceptLanguage = AcceptLanguage::Unspecified,
-        public int $signingKeyCacheSeconds = 600,
+        public int $signingKeyCacheSeconds = self::MAX_SIGNING_KEY_CACHE_SECONDS,
         public string $name = 'default',
     ) {
         $parts = parse_url($authority);
@@ -33,8 +36,8 @@ final readonly class ClientOptions
         if ($signatureLifetimeSeconds < 1 || $signatureLifetimeSeconds > 60) {
             throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('ClientOptions::$signatureLifetimeSeconds must be between 1 and 60 seconds. Anis would admit up to 300, but this SDK accepts answers only within 60 seconds: with a longer signature and a slow clock an order can complete and its answer — with the card codes — be discarded.');
         }
-        if ($signingKeyCacheSeconds <= 0) {
-            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('ClientOptions::$signingKeyCacheSeconds must be positive.');
+        if ($signingKeyCacheSeconds <= 0 || $signingKeyCacheSeconds > self::MAX_SIGNING_KEY_CACHE_SECONDS) {
+            throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('ClientOptions::$signingKeyCacheSeconds must be from 1 to 300 seconds, so a withdrawn Anis key stops verifying answers within five minutes.');
         }
     }
 
@@ -65,7 +68,7 @@ final readonly class ClientOptions
             };
         }
         $lifetime = $settings['signatureLifetimeSeconds'] ?? 60;
-        $cacheSeconds = $settings['signingKeyCacheSeconds'] ?? 600;
+        $cacheSeconds = $settings['signingKeyCacheSeconds'] ?? self::MAX_SIGNING_KEY_CACHE_SECONDS;
         $name = $settings['name'] ?? 'default';
         if (!is_int($lifetime)) {
             throw new \Anis\Partners\Errors\AnisPartnersInvalidArgumentException('ClientOptions::$signatureLifetimeSeconds must be a whole number of seconds.');

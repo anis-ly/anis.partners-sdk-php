@@ -39,8 +39,13 @@ uses the raw header values. Enrollment responses have neither request binding co
 
 The cached key document includes `keys[].status`, `notBefore`, `retiredAt` and `revoked[].kid`, `compromisedAt`.
 A revoked key is refused as `key_compromised`. A retired key signing after `retiredAt` is refused as `key_retired`;
-a next key signing before `notBefore` is refused as `key_not_yet_valid`. Equality at each boundary is allowed.
+any published key (`active`, `next` or `retired`) signing before its `notBefore` is refused as `key_not_yet_valid`.
+Equality at each boundary is allowed.
 Missing or different tags are refused as `profile_unexpected`.
+
+The key document is cached for five minutes by default and at most five minutes, so a withdrawn key stops verifying
+answers within that time. Anis keeps a retired key in the document for 90 days after it retires and a compromised key
+id in `revoked[]` for 90 days, so stored answers can still be checked during a dispute.
 
 The closed verification vocabulary is `signature_missing`, `signature_malformed`, `signature_invalid`,
 `content_digest_mismatch`, `covered_components_mismatch`, `unknown_key`, `key_rejected`,

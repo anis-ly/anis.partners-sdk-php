@@ -10,13 +10,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - 1.x is deprecated — upgrade to 2.0.0.
 - Signed answers require `tag="anis-response-v2"` and bind both raw request signature fields.
-- Response-key verification rejects compromised keys, retired keys signing after retirement, and next keys signing before activation.
+- Response-key verification rejects compromised keys, retired keys signing after retirement, and any published key signing before its notBefore (active, next and retired).
+- The signing-key document is cached for 5 minutes by default and at most 5 minutes; ClientOptions and HttpSigningKeySource refuse more than 300 seconds.
+- An unknown response key id re-fetches the key document at most once per 30 seconds per key source, failed fetches included.
+- Documentation: retired keys stay published for 90 days after retirement.
 - Owned-card routes use `/owned-cards`; `MaskedCard` uses `soldCardId`, `operationId` and nested `CardSummary`.
 - Reveals and order credentials include the full card summary. Catalogue cards include logo and category.
 - Wallet currency is carried by `balance.currency`; wire Money amounts are nonnegative decimals with three places and uppercase currency.
 
 ### Added
 
+- Recognise spending_limit_exceeded (HTTP 429): a spending-capped order is not placed and is reported as LimitExceededException with the Retry-After delay until the spending window ends.
 - `access()->suspendApplication($reason)` and `access()->revokeKey($keyId, $reason)` with signed JSON reasons.
 - `catalogue()->getCard($walletId, $cardId)` for a single wallet-priced catalogue card.
 
