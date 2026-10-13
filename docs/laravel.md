@@ -110,6 +110,8 @@ own. In the job:
 - `OrderCompleted`: store the credentials first, then mark the order done.
 - `OrderProcessing` or `OrderOutcomeUnknown`: dispatch the job again with `->delay()` set to the suggested wait, and
   call `orders()->resume()` with the **same** operation id and request. Never create a new id for it.
-- `OrderNotPlaced`: nothing was bought; close the order.
+- `OrderNotPlaced`: nothing was bought; close the order. If the refusal is the spending cap
+  (`LimitExceededException`, `spending_limit_exceeded`), a later purchase needs a new order with a new operation id after
+  `retryAfter` seconds — never resume the refused one.
 
 See [Orders and recovery](orders-and-recovery.md) for every rule.

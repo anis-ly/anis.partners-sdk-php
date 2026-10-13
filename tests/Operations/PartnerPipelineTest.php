@@ -175,6 +175,28 @@ final class PartnerPipelineTest extends TestCase
     }
 
     #[Test]
+    public function it_refuses_a_negative_price_before_sending_an_order(): void
+    {
+        $wire = new SignedFakeWire();
+        $client = self::client($wire);
+        $negative = new CreateOrderRequest(self::CARD, 1, Money::of('-0.001', 'LYD'), Money::of('-0.001', 'LYD'));
+
+        $calls = [
+            'create' => static fn() => $client->orders()->create(self::WALLET, self::OPERATION, $negative),
+            'resume' => static fn() => $client->orders()->resume(self::WALLET, self::OPERATION, $negative),
+        ];
+        foreach ($calls as $name => $call) {
+            try {
+                $call();
+                self::fail("{$name} must refuse a negative price.");
+            } catch (\InvalidArgumentException $exception) {
+                self::assertSame('ExpectedUnitPrice must be greater than zero.', $exception->getMessage());
+            }
+        }
+        self::assertSame([], $wire->requests);
+    }
+
+    #[Test]
     public function it_signs_the_exact_order_request_bytes_received_by_the_http_client(): void
     {
         $wire = new SignedFakeWire();

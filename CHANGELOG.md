@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.1] - Unreleased
+
+### Fixed
+
+- A wallet whose balance is below zero — while it uses allowed debt — can be read again. In 2.0.0, listing or reading such a wallet failed with an error. Amounts in Anis's answers may carry a leading minus sign (`-150.000`); `-0.000` reads as zero. `Money::of()` and `new Money()` accept a negative amount, and `amount()` prints it correctly (`-0.075`).
+- Money is limited to the same size either side of zero (`PHP_INT_MAX` thousandths).
+- Prices you send are unchanged: an order still refuses a unit price that is not greater than zero, before anything is sent.
+- Documentation: the spending-cap refusal (`spending_limit_exceeded`) in Orders and recovery and in the Laravel guide.
+
 ## [2.0.0] - 2026-10-13
 
 ### Breaking changes

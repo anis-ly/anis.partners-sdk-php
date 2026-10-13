@@ -83,10 +83,43 @@ final class MoneyTest extends TestCase
     }
 
     #[Test]
-    public function it_refuses_negative_amounts(): void
+    public function it_holds_a_negative_amount_as_a_wallet_in_allowed_debt_does(): void
+    {
+        self::assertSame(-150500, Money::of('-150.5', 'LYD')->thousandths);
+        self::assertSame('-150.500', Money::of('-150.5', 'LYD')->amount());
+        self::assertSame('-0.001', Money::of('-0.001', 'LYD')->amount());
+        self::assertSame('-0.075', Money::of('-0.075', 'LYD')->amount());
+        self::assertSame('-1.000', Money::of('-1', 'LYD')->amount());
+    }
+
+    #[Test]
+    public function it_reads_a_negative_wallet_balance_from_the_wire(): void
+    {
+        $money = Money::fromArray(['amount' => '-1250.075', 'currency' => 'LYD', 'asOf' => '2026-10-14T08:00:00Z']);
+
+        self::assertSame(-1250075, $money->thousandths);
+        self::assertSame('{"amount":"-1250.075","currency":"LYD","asOf":"2026-10-14T08:00:00Z"}', $money->toJson());
+        self::assertSame('0.000', Money::fromArray(['amount' => '-0.000', 'currency' => 'LYD'])->amount());
+    }
+
+    #[Test]
+    public function it_refuses_a_wire_amount_with_a_plus_or_a_double_sign(): void
+    {
+        foreach (['+1.000', '--1.000', '-1', '-1.0000'] as $amount) {
+            try {
+                Money::fromArray(['amount' => $amount, 'currency' => 'LYD']);
+                self::fail("{$amount} must be refused.");
+            } catch (\UnexpectedValueException) {
+                self::addToAssertionCount(1);
+            }
+        }
+    }
+
+    #[Test]
+    public function it_keeps_negative_amounts_inside_the_integer_range(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        Money::of('-0.001', 'LYD');
+        Money::of('-9223372036854775.808', 'LYD');
     }
 
     #[Test]

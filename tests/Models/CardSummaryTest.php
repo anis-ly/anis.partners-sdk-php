@@ -55,4 +55,12 @@ final class CardSummaryTest extends TestCase
         self::assertArrayNotHasKey('currency', $wallet->jsonSerialize());
         self::assertSame('LYD', $wallet->balance?->currency);
     }
+
+    #[Test]
+    public function it_reads_a_wallet_whose_balance_is_below_zero_while_it_uses_allowed_debt(): void
+    {
+        $wallet = Wallet::fromArray(['id' => self::ID, 'balance' => ['amount' => '-150.000', 'currency' => 'LYD']]);
+
+        self::assertSame('-150.000', $wallet->balance?->amount());
+    }
 }

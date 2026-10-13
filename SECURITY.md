@@ -7,7 +7,7 @@ version, and steps to reproduce it. Anis aims to acknowledge reports within five
 
 ## Supported versions
 
-Security fixes target 2.0.0. 1.x is deprecated — upgrade.
+Security fixes target 2.0.1. 1.x is deprecated — upgrade.
 
 Signed answers require the `anis-response-v2` profile. See the verification failure reasons in [Security and key custody](docs/security.md).
 
