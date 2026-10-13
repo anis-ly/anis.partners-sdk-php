@@ -1,6 +1,6 @@
 # Anis Partner SDK for PHP
 
-Version **2.0.0**. **1.x is deprecated — upgrade.**
+Version **2.0.1**. **1.x is deprecated — upgrade.**
 
 The PHP client for the Anis Partner API. It signs every request, verifies every answer Anis signs — orders, card
 reveals, access stops, enrollment and the signature self-check — and returns typed operations and order outcomes. See [test coverage](tests/PARITY.md) for local verification evidence.

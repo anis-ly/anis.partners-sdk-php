@@ -32,6 +32,9 @@ The total must equal unit price multiplied by quantity, both currencies must mat
 - **`OrderProcessing`**: Anis accepted work and asks for a later signed resume. Wait `retryAfterSeconds` (default 5 seconds) and use the same operation id and exact request.
 - **`OrderReplayed`**: this operation already completed. Credentials are not returned again. Use the invoice reveal route only if your application has the required permission.
 - **`OrderNotPlaced`**: Anis confirmed that nothing was bought. Fix the refusal and start a new purchase with a fresh id.
+  A spending-cap refusal (`spending_limit_exceeded`, HTTP 429, `LimitExceededException`) is one: the order would have
+  taken the application or wallet past its spending cap for the current window. `retryAfter` is the number of seconds
+  until the window ends (windows follow UTC); after it, place a new order with a new id — never resume the refused one.
 - **`OrderOutcomeUnknown`**: the purchase may still have completed. Keep the original id and request and resume after `suggestedDelaySeconds`.
 
 Five result types make the credential and payment state explicit; do not infer it from a nullable field or message text.
