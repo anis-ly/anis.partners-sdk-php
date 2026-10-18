@@ -23,7 +23,7 @@ final readonly class CatalogueCard implements \JsonSerializable
         public ?int $minimumQuantity = null,
         public ?int $maximumQuantity = null,
         public ?string $logo = null,
-        public ?CardGroup $category = null,
+        public ?CatalogueCardCategory $category = null,
     ) {}
 
     /**
@@ -54,7 +54,7 @@ final readonly class CatalogueCard implements \JsonSerializable
             ModelData::nullableInteger($data, 'minimumQuantity'),
             ModelData::nullableInteger($data, 'maximumQuantity'),
             ModelData::nullableString($data, 'logo'),
-            $category === null ? null : CardGroup::fromArray($category),
+            $category === null ? null : CatalogueCardCategory::fromArray($category),
         );
     }
 }

@@ -45,7 +45,7 @@ final class AccessOperationsTest extends TestCase
             self::assertNotSame('', $request->getHeaderLine('Nonce'));
             self::assertSame('', $request->getHeaderLine('Idempotency-Key'));
             self::assertStringStartsWith('sig1=("@method" "@authority" "@path" "@query" "content-digest" "nonce" "x-anis-date")', $request->getHeaderLine('Signature-Input'));
-            self::assertSame('anis-partners-php/2.0.1', $request->getHeaderLine('User-Agent'));
+            self::assertSame('anis-partners-php/2.1.0', $request->getHeaderLine('User-Agent'));
         }
     }
 

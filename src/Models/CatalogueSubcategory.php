@@ -19,6 +19,7 @@ final readonly class CatalogueSubcategory implements \JsonSerializable
         public int $displayOrder = 0,
         public bool $available = false,
         public ?LocalizedText $disclaimer = null,
+        public CatalogueCategoryType $categoryType = CatalogueCategoryType::Unknown,
     ) {}
 
     /**
@@ -41,6 +42,7 @@ final readonly class CatalogueSubcategory implements \JsonSerializable
             ModelData::integer($data, 'displayOrder'),
             ModelData::boolean($data, 'available'),
             $disclaimer === null ? null : LocalizedText::fromArray($disclaimer),
+            CatalogueCategoryType::parse($data['categoryType'] ?? null),
         );
     }
 }

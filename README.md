@@ -1,6 +1,6 @@
 # Anis Partner SDK for PHP
 
-Version **2.0.1**. **1.x is deprecated — upgrade.**
+Version **2.1.0**. **1.x is deprecated — upgrade.**
 
 The PHP client for the Anis Partner API. It signs every request, verifies every answer Anis signs — orders, card
 reveals, access stops, enrollment and the signature self-check — and returns typed operations and order outcomes. See [test coverage](tests/PARITY.md) for local verification evidence.
@@ -16,7 +16,7 @@ Requires PHP 8.2–8.5 and OpenSSL. Install the package and one PSR-18 HTTP clie
 installed PSR-18 client and PSR-17 factories when you create the client.
 
 ```bash
-composer require anis-ly/partners:^2.0 guzzlehttp/guzzle
+composer require anis-ly/partners:^2.1 guzzlehttp/guzzle
 ```
 
 Alternatively install `symfony/http-client` and `nyholm/psr7` as your HTTP client and message implementation.
@@ -97,6 +97,8 @@ $suspended = $client->access()->suspendApplication('Emergency maintenance');
 // Staff must resume a suspended application before it can send further admitted requests.
 ```
 
+Catalogue subcategories expose `categoryType`, and catalogue card categories expose `type`; both use
+`CatalogueCategoryType` and report `Unknown` when the answer omits the value or sends an unrecognised value.
 `MaskedCard` exposes `soldCardId`, `operationId`, invoice details and a shared `CardSummary` containing face value,
 logo, subcategory and category. Reveals and order `soldCards` use `RevealedCredential` with the same summary.
 Catalogue quantity limits are a minimum of 1 and a platform maximum of 100. Wallet currency is `balance.currency`.
