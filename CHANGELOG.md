@@ -4,6 +4,13 @@ All notable changes to this project are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.0] - Unreleased
+
+### Added
+
+- Catalogue subcategories expose `categoryType` as local or international, and unknown when absent.
+- Catalogue card categories expose `type` as local or international, and unknown when absent; owned cards, reveals and orders are unchanged.
+
 ## [2.0.1] - 2026-10-13
 
 ### Fixed

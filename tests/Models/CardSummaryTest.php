@@ -48,7 +48,7 @@ final class CardSummaryTest extends TestCase
         $wire = $card->jsonSerialize();
         self::assertArrayNotHasKey('faceValue', $wire);
         self::assertArrayNotHasKey('name', $wire);
-        self::assertSame(['id' => self::ID, 'name' => ['en' => 'Digital']], $wire['category']);
+        self::assertSame(['id' => self::ID, 'name' => ['en' => 'Digital'], 'type' => 'unknown'], $wire['category']);
         self::assertSame('https://assets.anis.ly/card.png', $wire['logo']);
         self::assertSame('Description', CatalogueSubcategory::fromArray(['id' => self::ID, 'description' => ['en' => 'Description']])->description?->en);
         $wallet = Wallet::fromArray(['id' => self::ID, 'balance' => ['amount' => '21.000', 'currency' => 'LYD']]);

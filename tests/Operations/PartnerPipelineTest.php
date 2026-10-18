@@ -398,12 +398,15 @@ final class PartnerPipelineTest extends TestCase
         $wire->responseQueue = [
             ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26"}],"nextCursor":"category-2"}', 'headers' => ['X-Request-Id' => 'cat-1']],
             ['status' => 200, 'body' => '{"items":[{"id":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'cat-2']],
-            ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26","categoryId":"b672ca4e-c751-4507-8069-326496525a98"}],"nextCursor":"sub-2"}', 'headers' => ['X-Request-Id' => 'sub-1']],
+            ['status' => 200, 'body' => '{"items":[{"id":"2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26","categoryId":"b672ca4e-c751-4507-8069-326496525a98","categoryType":"international"}],"nextCursor":"sub-2"}', 'headers' => ['X-Request-Id' => 'sub-1']],
             ['status' => 200, 'body' => '{"items":[{"id":"9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34","categoryId":"b672ca4e-c751-4507-8069-326496525a98"}],"nextCursor":null}', 'headers' => ['X-Request-Id' => 'sub-2']],
         ];
         $catalogue = self::client($wire)->catalogue();
         self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueCategory ? $item->id : throw new \UnexpectedValueException(), iterator_to_array($catalogue->listCategories(self::WALLET))));
-        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueSubcategory ? $item->id : throw new \UnexpectedValueException(), iterator_to_array($catalogue->listSubcategories(self::WALLET, self::CARD))));
+        $subcategories = iterator_to_array($catalogue->listSubcategories(self::WALLET, self::CARD));
+        self::assertSame(['2f1c8a94-6d37-4e52-b8a1-0c9e5d3f7b26', '9b2e4f17-3c6a-4d58-b0e1-7a5c8d2f6b34'], array_map(static fn(mixed $item): string => $item instanceof \Anis\Partners\Models\CatalogueSubcategory ? $item->id : throw new \UnexpectedValueException(), $subcategories));
+        self::assertInstanceOf(\Anis\Partners\Models\CatalogueSubcategory::class, $subcategories[0]);
+        self::assertSame(\Anis\Partners\Models\CatalogueCategoryType::International, $subcategories[0]->categoryType);
 
         self::assertStringContainsString('/catalog/categories?cursor=category-2', (string) $wire->requests[1]->getUri());
         self::assertStringContainsString('/catalog/categories/' . self::CARD . '/subcategories?cursor=sub-2', (string) $wire->requests[3]->getUri());

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Anis\Partners\Tests\Models;
 
 use Anis\Partners\Models\CatalogueCard;
+use Anis\Partners\Models\CatalogueCardCategory;
 use Anis\Partners\Models\CatalogueCategoryType;
 use Anis\Partners\Models\CatalogueSubcategory;
 use Anis\Partners\Models\MaskedCard;
@@ -32,6 +33,37 @@ final class ModelFieldTest extends TestCase
     public function it_leaves_an_absent_subcategory_disclaimer_null(): void
     {
         self::assertNull(CatalogueSubcategory::fromArray(['id' => '7a1c3e5f-2b4d-4f68-8a0c-9e1b3d5f7a2c'])->disclaimer);
+    }
+
+    #[Test]
+    public function it_reads_subcategory_category_type_and_maps_unknown_values(): void
+    {
+        $id = '7a1c3e5f-2b4d-4f68-8a0c-9e1b3d5f7a2c';
+
+        self::assertSame(CatalogueCategoryType::International, CatalogueSubcategory::fromArray(['id' => $id, 'categoryId' => $id, 'categoryType' => 'international'])->categoryType);
+        self::assertSame(CatalogueCategoryType::Local, CatalogueSubcategory::fromArray(['id' => $id, 'categoryId' => $id, 'categoryType' => 'local'])->categoryType);
+        self::assertSame(CatalogueCategoryType::Unknown, CatalogueSubcategory::fromArray(['id' => $id, 'categoryId' => $id])->categoryType);
+        self::assertSame(CatalogueCategoryType::Unknown, CatalogueSubcategory::fromArray(['id' => $id, 'categoryId' => $id, 'categoryType' => 'galactic'])->categoryType);
+    }
+
+    #[Test]
+    public function it_reads_catalogue_card_category_type_and_maps_unknown_values(): void
+    {
+        $id = '8d4b1e73-9a25-4c60-8f37-6b2e9d5a1c48';
+        $base = ['id' => $id, 'subcategoryId' => $id];
+        $local = CatalogueCard::fromArray($base + ['category' => ['id' => $id, 'name' => ['en' => 'Digital'], 'type' => 'local']]);
+        $international = CatalogueCard::fromArray($base + ['category' => ['id' => $id, 'name' => ['en' => 'Digital'], 'type' => 'international']]);
+        $absent = CatalogueCard::fromArray($base + ['category' => ['id' => $id, 'name' => ['en' => 'Digital']]]);
+        $unknown = CatalogueCard::fromArray($base + ['category' => ['id' => $id, 'name' => ['en' => 'Digital'], 'type' => 'galactic']]);
+
+        self::assertInstanceOf(CatalogueCardCategory::class, $local->category);
+        self::assertInstanceOf(CatalogueCardCategory::class, $international->category);
+        self::assertSame(CatalogueCategoryType::Local, $local->category->type);
+        self::assertSame(CatalogueCategoryType::International, $international->category->type);
+        self::assertSame(CatalogueCategoryType::Unknown, $absent->category?->type);
+        self::assertSame(CatalogueCategoryType::Unknown, $unknown->category?->type);
+        self::assertSame($id, $local->category->id);
+        self::assertSame('Digital', $local->category->name?->en);
     }
 
     #[Test]
