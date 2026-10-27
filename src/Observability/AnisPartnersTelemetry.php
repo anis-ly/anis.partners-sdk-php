@@ -19,7 +19,7 @@ use OpenTelemetry\Context\ContextKeys;
 final class AnisPartnersTelemetry
 {
     private const NAME = 'anis-ly/partners';
-    private const VERSION = '2.1.0';
+    private const VERSION = '2.2.0';
 
     /** @var \WeakMap<MeterInterface, array<string, CounterInterface>>|null */
     private static ?\WeakMap $counters = null;

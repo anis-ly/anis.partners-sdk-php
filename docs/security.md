@@ -30,6 +30,29 @@ Revealed voucher and serial values are intentionally available to partner code f
 
 Use HTTPS for every non-loopback authority. Plain HTTP is accepted only for `localhost`, `127.0.0.1`, or `::1` during local testing. HTTPS is what protects the answers Anis does not sign — profile, wallets, catalogue, owned-card lists and details, and the signing-key document; see [Which answers are verified](routes-and-permissions.md#which-answers-are-verified).
 
+## Verifying webhooks
+
+Anis signs every notification with a webhook key that is separate from the key that signs answers. Verify a delivery
+before reading it. See [Webhooks](webhooks.md) for the full guide.
+
+- Read the raw request bytes first. A re-encoded `$_POST` or decoded JSON changes the bytes the digest covers.
+- Give `PartnerWebhookVerifier` the address Anis was told to deliver to and your application id. Neither is ever taken
+  from the request, its Host header or a forwarding header.
+- The signature must cover exactly `@method`, `@target-uri`, `content-digest`, `webhook-id`, `anis-webhook-attempt`
+  and `anis-application-id`, use `tag="anis-partner-webhook-v1"`, live exactly 300 seconds and be at most 300 seconds
+  from your clock. There is no grace after expiry.
+- The key must carry `purpose: "webhook"` and be `active` or `next`. A retired key is refused even before its
+  retirement time, and a compromised key is refused whatever the signing date. This is deliberately stricter than the
+  answer verifier, whose behaviour is unchanged.
+- The verification reasons are `signature_missing`, `signature_malformed`, `signature_invalid`,
+  `content_digest_mismatch`, `covered_components_mismatch`, `unknown_key`, `key_rejected`, `algorithm_not_supported`,
+  `label_unexpected`, `created_out_of_window`, `profile_unexpected`, `key_compromised`, `key_retired`,
+  `key_not_yet_valid`, `signature_expired`, `validity_window_invalid`, `target_uri_mismatch`,
+  `application_id_mismatch`, `key_purpose_mismatch`, `method_unexpected`, `event_id_mismatch` and `envelope_invalid`.
+  They are a separate set from the answer reasons below.
+- Meter tokens and recipient details are in the notification. Keep them, the challenge, the signature and the raw
+  body out of logs.
+
 ## Response verification in 2.0.0
 
 Signed responses require `tag="anis-response-v2"`. Their covered fields are `@status`, `content-digest`,

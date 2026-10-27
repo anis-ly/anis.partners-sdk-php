@@ -21,5 +21,10 @@ final readonly class PartnerRoute
         // Defaults to signed so a route built without the flag can never take the unverified path; the closed route
         // table in PartnerRoutes states it explicitly for every route.
         public bool $signsResponse = true,
+        // The gateway's stable route id, the permission the route needs (null when it needs none) and whether the route
+        // names a wallet. They describe the published surface and are compared with the contract by the drift tests.
+        public ?string $routeId = null,
+        public ?string $requiredScope = null,
+        public bool $walletBound = false,
     ) {}
 }

@@ -276,6 +276,43 @@ final class PartnerResponseVerifierTest extends TestCase
         }
     }
 
+    /** @return iterable<string, array{?string, bool}> */
+    public static function purposeCases(): iterable
+    {
+        yield 'webhook purpose is refused' => ['webhook', false];
+        yield 'empty purpose is refused' => ['', false];
+        yield 'wrong case is refused' => ['Answer', false];
+        yield 'answer purpose verifies' => ['answer', true];
+        yield 'absent purpose verifies' => [null, true];
+    }
+
+    #[Test]
+    #[DataProvider('purposeCases')]
+    public function it_only_trusts_answer_or_unlabelled_keys_for_api_answers(?string $purpose, bool $accepted): void
+    {
+        $vector = self::vector();
+        $document = JsonFixture::object($vector['signingKeys'] ?? null);
+        $keys = JsonFixture::objectList($document, 'keys');
+        unset($keys[0]['purpose']);
+        if ($purpose !== null) {
+            $keys[0]['purpose'] = $purpose;
+        }
+        $document['keys'] = $keys;
+        $source = new StaticSigningKeySource(SigningKeySet::fromJson(JsonFixture::encode($document)));
+        $verifier = new PartnerResponseVerifier($source, new FrozenClock(JsonFixture::integer($vector, 'verifyAt')));
+        if ($accepted) {
+            $verifier->verify(self::response($vector));
+            self::assertSame(0, $source->refreshCalls);
+            return;
+        }
+        try {
+            $verifier->verify(self::response($vector));
+            self::fail('A key published for another purpose must not verify an API answer.');
+        } catch (UnverifiableResponseException $error) {
+            self::assertSame(ResponseVerificationFailure::KeyRejected, $error->failure());
+        }
+    }
+
     /** @return array<string, mixed> */
     private static function vector(): array
     {
@@ -305,5 +342,51 @@ final class PartnerResponseVerifierTest extends TestCase
             JsonFixture::nullableString($request, 'signatureInput'),
             JsonFixture::nullableString($request, 'signature'),
         );
+    }
+
+    #[Test]
+    public function it_reports_invalid_key_timestamps_from_http_as_key_rejected(): void
+    {
+        foreach (['notBefore', 'retiredAt'] as $member) {
+            foreach (['2026-10-20Z', '2026-10-20T08:00Z', '2026-10-20T08:00:00'] as $invalid) {
+                $vector = self::vector();
+                $document = JsonFixture::object($vector['signingKeys'] ?? null);
+                $keys = JsonFixture::objectList($document, 'keys');
+                $keys[0][$member] = $invalid;
+                $document['keys'] = $keys;
+                $http = new FakeHttpClient(JsonFixture::encode($document));
+                $source = new HttpSigningKeySource($http, new HttpFactory(), 'https://partners.example');
+                $verifier = new PartnerResponseVerifier($source, new FrozenClock(JsonFixture::integer($vector, 'verifyAt')));
+                try {
+                    $verifier->verify(self::response($vector));
+                    self::fail('Malformed lifecycle metadata must never yield a usable key.');
+                } catch (UnverifiableResponseException $error) {
+                    self::assertSame(ResponseVerificationFailure::KeyRejected, $error->failure());
+                    self::assertSame(1, $http->calls);
+                }
+            }
+        }
+    }
+
+    #[Test]
+    public function it_keeps_submicrosecond_activation_boundaries_when_reading_http_keys(): void
+    {
+        foreach ([[0, '0000001', ResponseVerificationFailure::KeyNotYetValid], [-1, '9999999', null], [0, '0000000', null]] as [$offset, $fraction, $failure]) {
+            $vector = self::vector();
+            $created = JsonFixture::integer($vector, 'verifyAt');
+            $document = JsonFixture::object($vector['signingKeys'] ?? null);
+            $keys = JsonFixture::objectList($document, 'keys');
+            $keys[0]['notBefore'] = gmdate('Y-m-d\TH:i:s', $created + $offset) . '.' . $fraction . 'Z';
+            $document['keys'] = $keys;
+            $http = new FakeHttpClient(JsonFixture::encode($document));
+            $verifier = new PartnerResponseVerifier(new HttpSigningKeySource($http, new HttpFactory(), 'https://partners.example'), new FrozenClock($created));
+            try {
+                $verifier->verify(self::response($vector));
+                self::assertNull($failure, 'A key activated after signing must be refused.');
+            } catch (UnverifiableResponseException $error) {
+                self::assertSame($failure, $error->failure());
+            }
+            self::assertSame(1, $http->calls);
+        }
     }
 }

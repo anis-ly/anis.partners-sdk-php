@@ -42,6 +42,38 @@ class AnisApiException extends \RuntimeException implements AnisPartnersExceptio
         parent::__construct(self::buildMessage($problem, $status, $isReplayed), $status);
     }
 
+    /**
+     * Reads the per-field messages Anis may attach to a validation refusal, ignoring any shape it does not recognise.
+     *
+     * The raw `$problem->extensions` stays untouched. Messages are meant for display to the operator, never for
+     * branching, and should not be written to logs wholesale because they can echo recipient details.
+     *
+     * @return array<string, string>
+     */
+    public function fieldErrors(): array
+    {
+        $extensions = $this->problem->extensions;
+        $fields = match (true) {
+            $extensions instanceof \stdClass => $extensions->fields ?? null,
+            is_array($extensions) => $extensions['fields'] ?? null,
+            default => null,
+        };
+        if ($fields instanceof \stdClass) {
+            $fields = get_object_vars($fields);
+        }
+        if (!is_array($fields) || array_is_list($fields)) {
+            return [];
+        }
+        $messages = [];
+        foreach ($fields as $key => $message) {
+            if (is_string($message)) {
+                $messages[(string) $key] = $message;
+            }
+        }
+
+        return $messages;
+    }
+
     /** Returns the typed Anis problem code while getCode() retains the HTTP status. */
     public function errorCode(): ErrorCode
     {

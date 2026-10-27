@@ -23,6 +23,107 @@ final class ModelData
     }
 
     /** @param array<array-key, mixed> $data */
+    public static function requiredString(#[\SensitiveParameter] array $data, string $key): string
+    {
+        $value = $data[$key] ?? null;
+        if (!is_string($value)) {
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException("The '{$key}' model member must be a string.");
+        }
+
+        return $value;
+    }
+
+    /** @param array<array-key, mixed> $data */
+    public static function requiredInteger(#[\SensitiveParameter] array $data, string $key): int
+    {
+        $value = $data[$key] ?? null;
+        if (!is_int($value)) {
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException("The '{$key}' model member must be an integer.");
+        }
+
+        return $value;
+    }
+
+    /**
+     * Reads a decimal amount that travels as a string, so no float can lose a digit.
+     * @param array<array-key, mixed> $data
+     */
+    public static function decimalString(#[\SensitiveParameter] array $data, string $key): string
+    {
+        $value = $data[$key] ?? null;
+        if (!is_string($value) || preg_match('/\A-?\d+(?:\.\d+)?\z/D', $value) !== 1) {
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException("The '{$key}' model member must be a decimal string.");
+        }
+
+        return $value;
+    }
+
+    /** @param array<array-key, mixed> $data */
+    public static function nullableDecimalString(#[\SensitiveParameter] array $data, string $key): ?string
+    {
+        return ($data[$key] ?? null) === null ? null : self::decimalString($data, $key);
+    }
+
+    /** @param array<array-key, mixed> $data */
+    public static function requiredDateTime(#[\SensitiveParameter] array $data, string $key): \DateTimeImmutable
+    {
+        return self::dateTime($data, $key) ?? throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException("The '{$key}' model member is required.");
+    }
+
+    /**
+     * @param array<array-key, mixed> $data
+     * @return array<array-key, mixed>
+     */
+    public static function requiredObject(#[\SensitiveParameter] array $data, string $key): array
+    {
+        return self::object($data, $key) ?? throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException("The '{$key}' model member is required.");
+    }
+
+    /** @param array<array-key, mixed> $data */
+    public static function requiredUuid(#[\SensitiveParameter] array $data, string $key): string
+    {
+        self::requiredString($data, $key);
+
+        return self::uuid($data, $key);
+    }
+
+    /** @param array<array-key, mixed> $data */
+    public static function requiredBoolean(#[\SensitiveParameter] array $data, string $key): bool
+    {
+        if (!is_bool($data[$key] ?? null)) {
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException("The '{$key}' model member must be a boolean.");
+        }
+
+        return $data[$key];
+    }
+
+    /**
+     * @param array<array-key, mixed> $data
+     * @return list<array<array-key, mixed>>
+     */
+    public static function requiredObjectList(#[\SensitiveParameter] array $data, string $key): array
+    {
+        if (!isset($data[$key])) {
+            throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException("The '{$key}' model member is required.");
+        }
+
+        return self::objectList($data, $key);
+    }
+
+    /**
+     * Requires presence even when a member's contract permits an explicit null.
+     * @param array<array-key, mixed> $data
+     */
+    public static function requireMembers(#[\SensitiveParameter] array $data, string ...$keys): void
+    {
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $data)) {
+                throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException("The '{$key}' model member is required.");
+            }
+        }
+    }
+
+    /** @param array<array-key, mixed> $data */
     public static function integer(#[\SensitiveParameter] array $data, string $key, int $default = 0): int
     {
         $value = $data[$key] ?? $default;

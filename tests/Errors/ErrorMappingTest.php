@@ -71,6 +71,15 @@ final class ErrorMappingTest extends TestCase
             ErrorCode::ChallengeExpired->value => [EnrollmentRefusedException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::KeyProofInvalid->value => [EnrollmentRefusedException::class, OrderRefusalOutcome::NotPlaced],
             ErrorCode::KeyDuplicate->value => [EnrollmentRefusedException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::PartnerNetworkLimitReached->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::NetworkNotRemovable->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::MeterRejected->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::PackageUnavailable->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::DirectRechargeProductUnavailable->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::AmountOutOfRange->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::DirectRechargeNotSuspended->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::WebhookEndpointInvalid->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
+            ErrorCode::WebhookEndpointUnverified->value => [AnisApiException::class, OrderRefusalOutcome::NotPlaced],
         ];
         foreach ($decisions as $value => [$class, $outcome]) {
             yield $value => [ErrorCode::from($value), $class, $outcome];
@@ -161,5 +170,61 @@ final class ErrorMappingTest extends TestCase
         self::assertSame(ErrorCode::InternalError, $error->errorCode);
         self::assertSame('internal_error', $error->rawCode);
         self::assertSame(502, $error->getCode());
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function productCodes(): iterable
+    {
+        foreach (['meter_rejected', 'package_unavailable', 'direct_recharge_product_unavailable', 'amount_out_of_range', 'direct_recharge_not_suspended', 'webhook_endpoint_invalid', 'webhook_endpoint_unverified'] as $code) {
+            yield $code => [$code];
+        }
+    }
+
+    #[Test]
+    #[DataProvider('productCodes')]
+    public function it_knows_each_product_code_and_never_retries_it(string $code): void
+    {
+        self::assertNotSame(ErrorCode::Unknown, ErrorCode::parse($code));
+        self::assertFalse(ErrorCode::parse($code)->isRetryable());
+    }
+
+    #[Test]
+    public function it_knows_forty_eight_unique_public_codes(): void
+    {
+        self::assertCount(48, array_filter(ErrorCode::cases(), static fn(ErrorCode $code): bool => $code !== ErrorCode::Unknown));
+    }
+
+    #[Test]
+    public function it_keeps_a_raw_unknown_problem_code_spelling(): void
+    {
+        $error = AnisApiException::fromResponse(422, [], '{"code":"meter_rejected_v2"}');
+
+        self::assertSame(ErrorCode::Unknown, $error->errorCode);
+        self::assertSame('meter_rejected_v2', $error->rawCode);
+    }
+
+    /** @return iterable<string, array{string, array<array-key, string>}> */
+    public static function fieldErrorBodies(): iterable
+    {
+        yield 'absent extensions' => ['{"code":"validation_failed"}', []];
+        yield 'absent fields' => ['{"code":"validation_failed","extensions":{"other":1}}', []];
+        yield 'fields of the wrong shape' => ['{"code":"validation_failed","extensions":{"fields":"text"}}', []];
+        yield 'fields as a list of strings' => ['{"code":"validation_failed","extensions":{"fields":["a"]}}', []];
+        yield 'non string messages ignored' => ['{"code":"validation_failed","extensions":{"fields":{"A":1,"B":"bad","C":null}}}', ['B' => 'bad']];
+        yield 'unicode and unknown members' => ['{"code":"validation_failed","extensions":{"future":true,"fields":{"recipient_number":"رقم غير صحيح"}}}', ['recipient_number' => 'رقم غير صحيح']];
+    }
+
+    /** @param array<array-key, string> $expected */
+    #[Test]
+    #[DataProvider('fieldErrorBodies')]
+    public function it_reads_recipient_field_errors_safely_and_keeps_the_raw_extensions(string $body, array $expected): void
+    {
+        $error = AnisApiException::fromResponse(422, [], $body);
+
+        $raw = json_decode($body, false, 512, JSON_THROW_ON_ERROR);
+        self::assertInstanceOf(\stdClass::class, $raw);
+        self::assertEquals($raw->extensions ?? null, $error->problem->extensions);
+        self::assertSame($expected, $error->fieldErrors());
+        self::assertEquals($raw->extensions ?? null, $error->problem->extensions);
     }
 }
