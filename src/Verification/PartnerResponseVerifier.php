@@ -109,6 +109,11 @@ final class PartnerResponseVerifier
             $this->fail(ResponseVerificationFailure::UnknownKey);
         }
 
+        // A key published for another purpose (for example webhook) must never vouch for an API answer; an absent purpose stays accepted.
+        if ($key->purpose !== null && $key->purpose !== 'answer') {
+            $this->fail(ResponseVerificationFailure::KeyRejected);
+        }
+
         if (!in_array($key->status, ['active', 'next', 'retired'], true) || $key->notBefore === null || ($key->status === 'retired' && $key->retiredAt === null)) {
             $this->fail(ResponseVerificationFailure::KeyRejected);
         }

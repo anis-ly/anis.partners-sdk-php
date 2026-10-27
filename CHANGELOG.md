@@ -4,6 +4,28 @@ All notable changes to this project are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.2.0] - <date placeholder>
+
+### Added
+
+- Charge electricity meters and read receipts, tokens and refunds with safe recovery after an interrupted request.
+- Quote a direct recharge, follow direct recharges and correct recipient details while a direct recharge is paused; recipient corrections return the same DirectRechargeProcessing result as 202 creates, with retry delay and read Location while the read side catches up.
+- Manage a webhook endpoint and request delivery again when a notification was missed.
+- Verify notifications before reading their contents and keep recipient field errors available to the integration.
+
+### Changed
+
+- A meter charge that failed while its refund is still `pending` is no longer final: `meterCharges()->create()` and `resume()` return `MeterChargeProcessing` with the read, because money was taken and the refund has not landed. `refunded` and `notCharged` stay final.
+- `idempotency_conflict` on a meter charge or direct recharge create or resume returns `MeterChargeOutcomeUnknown` or `DirectRechargeOutcomeUnknown` instead of `...NotPlaced`, because the original request may already have been accepted and charged. Read the operation by its id with `get()` before any new attempt.
+- `get()` on a meter charge or direct recharge can answer the recorded refusal of the create (409 or 422, `Idempotency-Replayed: true`); it throws the typed `AnisApiException`, which is the definitive answer for that id. This is documented and tested.
+- A webhook address must have a host name that contains a dot. Public text now says "the electricity company" and "direct recharge"; wire names are unchanged.
+- The install line uses `^2.2`.
+
+### Security
+
+- The answer verifier now rejects a signing key whose `purpose` is not `answer`; a key document without `purpose` is still accepted.
+- A malformed `notBefore` or `retiredAt` in the signing-key document now gives the typed `key_rejected` refusal instead of a parser exception.
+
 ## [2.1.0] - 2026-10-18
 
 ### Added

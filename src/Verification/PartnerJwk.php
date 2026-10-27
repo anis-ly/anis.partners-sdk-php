@@ -24,6 +24,7 @@ final readonly class PartnerJwk
         public ?string $status = null,
         public ?\DateTimeImmutable $notBefore = null,
         public ?\DateTimeImmutable $retiredAt = null,
+        public ?string $purpose = null,
     ) {
         $this->hasPrivateMember = $d !== null && $d !== '';
     }
@@ -38,7 +39,7 @@ final readonly class PartnerJwk
     public static function fromArray(#[\SensitiveParameter] array $value): self
     {
         $strings = [];
-        foreach (['kty', 'crv', 'x', 'y', 'kid', 'use', 'alg', 'd'] as $member) {
+        foreach (['kty', 'crv', 'x', 'y', 'kid', 'use', 'alg', 'd', 'purpose'] as $member) {
             $item = $value[$member] ?? null;
             if ($item !== null && !is_string($item)) {
                 throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('A signing-key member has an invalid type.');
@@ -50,9 +51,23 @@ final readonly class PartnerJwk
         if ($status !== null && !in_array($status, ['active', 'next', 'retired'], true)) {
             throw new \Anis\Partners\Errors\AnisPartnersUnexpectedValueException('A signing-key status is invalid.');
         }
-        return new self(...[...$strings, 'status' => $status,
-            'notBefore' => \Anis\Partners\Models\ModelData::dateTime($value, 'notBefore'),
-            'retiredAt' => \Anis\Partners\Models\ModelData::dateTime($value, 'retiredAt')]);
+        try {
+            $notBefore = \Anis\Partners\Models\ModelData::dateTime($value, 'notBefore');
+            $retiredAt = \Anis\Partners\Models\ModelData::dateTime($value, 'retiredAt');
+            $rawNotBefore = \Anis\Partners\Models\ModelData::nullableString($value, 'notBefore');
+            if ($notBefore !== null && $rawNotBefore !== null
+                && preg_match('/\.\d{6}(\d+)(?:Z|[+-]\d{2}:\d{2})\z/D', $rawNotBefore, $fraction) === 1
+                && strspn($fraction[1], '0') !== strlen($fraction[1])) {
+                // Activation must never move earlier when PHP truncates a fraction finer than one microsecond.
+                $notBefore = $notBefore->modify('+1 microsecond');
+            }
+        } catch (\Anis\Partners\Errors\AnisPartnersUnexpectedValueException) {
+            // Invalid lifecycle metadata makes this key unusable; verifiers report key_rejected instead of trusting it.
+            $notBefore = null;
+            $retiredAt = null;
+        }
+
+        return new self(...[...$strings, 'status' => $status, 'notBefore' => $notBefore, 'retiredAt' => $retiredAt]);
     }
 
     /**
@@ -62,7 +77,7 @@ final readonly class PartnerJwk
     public function toArray(): array
     {
         $values = [];
-        foreach (['kty', 'crv', 'x', 'y', 'kid', 'use', 'alg'] as $member) {
+        foreach (['kty', 'crv', 'x', 'y', 'kid', 'use', 'alg', 'purpose'] as $member) {
             $value = $this->{$member};
             if ($value !== null) {
                 $values[$member] = $value;

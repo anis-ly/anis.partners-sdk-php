@@ -47,6 +47,96 @@ A request-signing or local validation exception means nothing was sent. Correct 
 
 `Retry-After` is honored from 0 through 2,147,483,647 seconds. Missing or out-of-range values use the operation's default delay. Access-door refusals use 60 seconds unless Anis supplies a valid `Retry-After`.
 
+## Meter charges and direct recharge
+
+`meterCharges()->create()` and `directRecharges()->create()` follow the same safe-recovery rules as an order: you
+choose and store the operation id and the exact request first, the id travels only as the `Idempotency-Key`, and
+`resume()` repeats the same request under the same id with a fresh signature. It never makes a new id.
+
+- **`...Processing`**: Anis accepted the work (its answer is exactly the operation id, the operation type and
+  `processing`) or returned a read that is not final yet. Wait `retryAfterSeconds`, then `resume()` or `get()`.
+  A direct recharge status of `awaitingPayment`, `pending`, `inProgress`, `suspendedDataError` or `rejectedAwaitingRefund` is not final.
+  A meter charge that failed while its refund is `pending` is not final either: money was taken and the refund is on its
+  way, so read again (`get()`) or wait for the `meterCharge.failed` notification.
+- **`...Final`**: the closed read. A meter charge that failed and was refunded (`refund->status` `refunded`) or never
+  charged (`notCharged`) is a final result with its failure and refund, not an error. A direct recharge is final when it is `completed`, `paymentFailed` or `rejectedWithRefund`.
+- **`...NotPlaced`**: Anis confirmed nothing was bought: a definitive refusal of the first create, or a recorded replay
+  of one. A new attempt needs a new id.
+- **`...OutcomeUnknown`**: a timeout, a lost or unreadable answer, an answer that fails verification, a status this SDK
+  does not know, an answer for another operation, an access refusal while resuming, or `idempotency_conflict`.
+  Resume the original id and request.
+
+`idempotency_conflict` on a create or a resume is never `...NotPlaced`. It does not say the original request failed: it
+may already have been accepted and charged. The result is `...OutcomeUnknown` with the typed refusal in `cause`; read the
+operation by its id with `get()` before any new attempt. The SDK never makes a second purchase under another id.
+`get()` returns the full read, or the three-member processing answer while Anis has not yet stored the operation.
+
+`get()` can also answer the recorded refusal of the create: a signed 409 or 422 with `Idempotency-Replayed: true`. It
+raises the same typed `AnisApiException` as a refused create (`errorCode`, `status`, `isReplayed`) and is the definitive
+answer for that id. For `insufficient_balance`, `price_changed` and the other refusals nothing was charged. A 409
+`idempotency_conflict` on `get()` means no operation of your application exists under that id.
+
+A recipient correction (`updateRecipient()`), an endpoint change (`webhookEndpoint()->set()`), a test and a redelivery
+are signed changes, not purchases. They are sent once and never replayed for you. After a lost answer, read the
+direct recharge, the endpoint or the delivery list before deciding to send the change again.
+
+`updateRecipient()` returns `DirectRechargeProcessing`, the same client result as `create()` returns for a verified
+202. Both expose `operationId`, `retryAfterSeconds` and `location`, with `read` null for the acknowledgement. They use
+the same Retry-After parser and default to 5 seconds when the header is absent or unsupported. Recipient PATCH also
+requires the operation's verified Location header. Its wire body contains exactly `operationId`,
+`operationType: directRecharge` and `status: processing`; the strict `DirectRechargeAccepted` wire model is used
+internally and remains the model returned by `get()` for a GET 202. This acknowledges the correction without a direct recharge read.
+Read later with `get()` or wait for a `directRecharge.*` webhook. An immediate read may still show `suspendedDataError`;
+neither its status nor matching recipient values prove that this correction has been projected.
+A missing/wrong Location, malformed acknowledgement or unexpected successful status raises `MalformedResponseException`.
+Empty answers, failed signature verification, transport failures and API refusals retain their normal exceptions.
+A lost, unreadable or unverifiable answer leaves the correction uncertain; read before deciding whether to submit
+another correction. There is no automatic retry or read. An unchanged correction that already applied can be refused as `direct_recharge_not_suspended`.
+
+```php
+use Anis\Partners\Models\DirectRechargeRecipientInput;
+use Anis\Partners\Models\UpdateDirectRechargeRecipientRequest;
+
+$operationId = '7d4e1a90-5b2c-4e7f-8a13-0c9d6e2b4f81'; // The existing paused recharge's operation id.
+$acknowledgement = $client->directRecharges()->updateRecipient(
+    $operationId,
+    new UpdateDirectRechargeRecipientRequest([new DirectRechargeRecipientInput('recipient_number', '01098765432')]),
+);
+$readPath = $acknowledgement->location; // The same location accessor as a 202 create.
+$retryDelay = $acknowledgement->retryAfterSeconds; // Wait this long before reading; read is null.
+// Read later with get($acknowledgement->operationId), or wait for its webhook. Do not replay the correction automatically.
+```
+
+Persist the request before the call. The console samples keep it as JSON and rebuild it with `fromArray()`:
+
+```php
+use Anis\Partners\Models\CreateDirectRechargeRequest;
+use Anis\Partners\Models\DirectRechargeAmountIn;
+use Anis\Partners\Models\DirectRechargeFinal;
+use Anis\Partners\Models\DirectRechargeProcessing;
+use Anis\Partners\Models\DirectRechargeRecipientInput;
+use Anis\Partners\Models\Money;
+
+$productId = '4a6c2e81-7b39-4d15-a2f8-3e7b9c1d5046';
+$quote = $client->directRechargeProducts()->quote($walletId, $productId, '1500.000', DirectRechargeAmountIn::Fx);
+$request = new CreateDirectRechargeRequest(
+    $productId,
+    $quote->payout->amount,
+    $quote->total,
+    [new DirectRechargeRecipientInput('recipient_number', '01012345678')],
+    'Family support',
+);
+$operationId = $uuidGenerator->v4();
+// Store $operationId and $request->toJson() durably here, before the call.
+$result = $client->directRecharges()->create($walletId, $operationId, $request);
+
+if ($result instanceof DirectRechargeProcessing) {
+    // Wait, then resume() or get(). A paused recharge needs updateRecipient() with corrected details.
+} elseif ($result instanceof DirectRechargeFinal) {
+    $status = $result->recharge->status;
+}
+```
+
 ## Recovery exhausted
 
 An order with status `recoveryExhausted` is **not failed**; it may have completed. Never submit it under a new id. Continue resuming the same id slowly, in minutes rather than seconds. Every resume asks Anis to check with the owner, and one may return the completed order with its credentials. Contact support@anis.ly with the operation id so Anis can resolve it.

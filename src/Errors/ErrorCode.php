@@ -10,6 +10,7 @@ enum ErrorCode: string
     case Unknown = 'unknown';
     case AccountInactive = 'account_inactive';
     case AllowedDebtConsentRequired = 'allowed_debt_consent_required';
+    case AmountOutOfRange = 'amount_out_of_range';
     case BindingNotAuthorized = 'binding_not_authorized';
     case BusinessSubscriptionRequired = 'business_subscription_required';
     case CardNotFound = 'card_not_found';
@@ -18,6 +19,8 @@ enum ErrorCode: string
     case CurrencyNotSupported = 'currency_not_supported';
     case DailyLimitExceeded = 'daily_limit_exceeded';
     case DependencyUnavailable = 'dependency_unavailable';
+    case DirectRechargeNotSuspended = 'direct_recharge_not_suspended';
+    case DirectRechargeProductUnavailable = 'direct_recharge_product_unavailable';
     case IdempotencyConflict = 'idempotency_conflict';
     case InsufficientBalance = 'insufficient_balance';
     case InsufficientScope = 'insufficient_scope';
@@ -30,8 +33,12 @@ enum ErrorCode: string
     case KeyNotRevocable = 'key_not_revocable';
     case KeyProofInvalid = 'key_proof_invalid';
     case MalformedSignedRequest = 'malformed_signed_request';
+    case MeterRejected = 'meter_rejected';
+    case NetworkNotRemovable = 'network_not_removable';
     case OperationProcessing = 'operation_processing';
     case OwnerLimitExceeded = 'owner_limit_exceeded';
+    case PackageUnavailable = 'package_unavailable';
+    case PartnerNetworkLimitReached = 'partner_network_limit_reached';
     case PriceChanged = 'price_changed';
     case PurchaseNotAllowed = 'purchase_not_allowed';
     case QuantityUnavailable = 'quantity_unavailable';
@@ -47,6 +54,8 @@ enum ErrorCode: string
     case WalletDisabled = 'wallet_disabled';
     case WalletExpired = 'wallet_expired';
     case WalletNotGranted = 'wallet_not_granted';
+    case WebhookEndpointInvalid = 'webhook_endpoint_invalid';
+    case WebhookEndpointUnverified = 'webhook_endpoint_unverified';
 
     /** Resolves wire values leniently so a future code does not break response handling. */
     public static function parse(?string $value): self

@@ -48,3 +48,20 @@ structured debug and information logs. A regular run uses Guzzle configured with
 
 An order's `OrderOutcomeUnknown` means resume the same operation id and request. `OrderCompleted` credentials should
 be stored in protected custody; the sample reports only their count after an order and masks reveal values by default.
+
+## Meter, direct recharge and notifications
+
+`products-sample.php` shows the 2.2.0 calls: meter packages, `meter-charge`, `meter-resume`, `meter-status`, direct
+recharge products, `recharge-quote`, `recharge`, `recharge-resume`, `recharge-status`, `recharge-fix`, and the
+`webhook-*` commands for the endpoint, a test, the delivery list and a redelivery. Run `php samples/console/products-sample.php help`.
+It reads `ANIS_PARTNERS_AUTHORITY`, `SAMPLE_KEY_FILE` and `SAMPLE_KEY_ID`, and writes each create's operation id and
+exact request to an owner-only file in `SAMPLE_PRODUCTS_FOLDER` before anything is sent; `*-resume` reads that file.
+It never prints meter tokens or recipient details. `recharge-fix` consumes `DirectRechargeProcessing`, the same result
+as a 202 create, and prints the operation id, read Location and retry delay. The acknowledgement has no direct recharge read. It does not fetch a direct recharge or claim the correction is already visible; use `recharge-status` later or
+wait for the webhook. After a lost or malformed answer, read before deciding whether to send another correction.
+
+`samples/webhook-receiver/receive.php` is a separate receiving handler: it reads the raw body, verifies the delivery,
+answers the verification challenge, and marks where your durable deduplication belongs. Configure `WEBHOOK_URL` as
+the registered expected address and `WEBHOOK_ORIGIN` as the trusted public deployment origin (for example
+`https://pos.example.ly`). It combines that origin with the received raw path/query and reads the actual request method;
+Host and forwarding headers never supply the trusted origin.

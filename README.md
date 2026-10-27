@@ -1,6 +1,6 @@
 # Anis Partner SDK for PHP
 
-Version **2.1.0**. **1.x is deprecated — upgrade.**
+Version **2.2.0**. **1.x is deprecated — upgrade.**
 
 The PHP client for the Anis Partner API. It signs every request, verifies every answer Anis signs — orders, card
 reveals, access stops, enrollment and the signature self-check — and returns typed operations and order outcomes. See [test coverage](tests/PARITY.md) for local verification evidence.
@@ -16,7 +16,7 @@ Requires PHP 8.2–8.5 and OpenSSL. Install the package and one PSR-18 HTTP clie
 installed PSR-18 client and PSR-17 factories when you create the client.
 
 ```bash
-composer require anis-ly/partners:^2.1 guzzlehttp/guzzle
+composer require anis-ly/partners:^2.2 guzzlehttp/guzzle
 ```
 
 Alternatively install `symfony/http-client` and `nyholm/psr7` as your HTTP client and message implementation.
@@ -103,6 +103,42 @@ Catalogue subcategories expose `categoryType`, and catalogue card categories exp
 logo, subcategory and category. Reveals and order `soldCards` use `RevealedCredential` with the same summary.
 Catalogue quantity limits are a minimum of 1 and a platform maximum of 100. Wallet currency is `balance.currency`.
 
+## Meter charges, direct recharge and notifications
+
+Since 2.2.0 the client also reads and sells electricity meter charges and direct recharge, follows them to a closed
+result, corrects a paused recipient, and manages the address that receives notifications. The wallet statement is not part of this release.
+
+```php
+use Anis\Partners\Models\CreateMeterChargeRequest;
+use Anis\Partners\Models\MeterChargeFinal;
+use Anis\Partners\Models\MeterChargeProcessing;
+use Anis\Partners\Models\Money;
+
+$package = $client->meterCharges()->getMeterPackagesPage($walletId)->items[0] ?? throw new RuntimeException('No package is available.');
+$request = new CreateMeterChargeRequest($package->id, '0268000710262', $package->unitPrice, 'POS-77-INV-1093');
+$operationId = $uuidGenerator->v4(); // A new random UUID v4 for each charge.
+// Persist $operationId and $request->toJson() in your durable store before the call.
+$result = $client->meterCharges()->create($walletId, $operationId, $request);
+
+if ($result instanceof MeterChargeFinal && $result->charge->receipt !== null) {
+    foreach ($result->charge->receipt->tokens as $token) {
+        // Key-change tokens come first, then the credit token. Hand them to the customer; do not log them.
+    }
+} elseif ($result instanceof MeterChargeProcessing) {
+    // Wait $result->retryAfterSeconds, then call resume() with the same id and request.
+}
+```
+
+- **Meter charges** return receipts, every token in the electricity company's order, and the refund state of a failed charge.
+- **Direct recharge** has products, places, a quote in dinars or in the product currency, a create that follows the
+  same rules as an order, and a recipient correction while the recharge is paused on wrong data. `updateRecipient()`
+  returns `DirectRechargeProcessing`, the same result as a 202 create: `operationId`, `retryAfterSeconds`, `location`
+  and a null `read`. Read the direct recharge later or wait for its webhook; acceptance does not mean the read already
+  includes the correction. Recipient updates are sent once and never replayed automatically.
+- **Notifications** are set up with `webhookEndpoint()`, listed and redelivered with `webhookEvents()`, and proven
+  with `PartnerWebhookVerifier` before their content is read. See [Webhooks](docs/webhooks.md).
+- A validation refusal exposes the per-field messages Anis sends for recipient details through `fieldErrors()`.
+
 ## Refusals built into the design
 
 - You provide and persist the order id; a new id after a timeout could make a second purchase.
@@ -115,13 +151,13 @@ Catalogue quantity limits are a minimum of 1 and a platform maximum of 100. Wall
 
 ## Coverage and proof
 
-The client covers profile, wallet, catalogue, order, owned-card, reveal, diagnostic, access-stop, enrollment, and response-key routes. Set timeouts and disable redirects on your PSR-18 HTTP client; signed partner requests must not be silently replayed to another location.
+The client covers profile, wallet, catalogue, order, meter charge, direct recharge, webhook endpoint and delivery, owned-card, reveal, diagnostic, access-stop, enrollment, and response-key routes. It covers every partner route except the three staging-only test endpoints for the allowed-address list, which are not part of the partner API you integrate against. Set timeouts and disable redirects on your PSR-18 HTTP client; signed partner requests must not be silently replayed to another location.
 Conformance tests use the published request, response, safety-code, and enrollment vectors. Contract tests compare route paths, signature kinds, which routes' answers are signed, public error codes, enrollment fields, and signature-component order with the checked-in contracts. The repository sample is excluded from Composer archives; clone the repository or copy the sample into your application and update its autoload path.
 
 Typed error cases are generated from `contracts/error-catalogue.json`. Run `php tools/generate-errors.php` from a repository clone when updating the generated enum; the generator is not included in Composer archives.
 
 See [Errors](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/errors.md), [Security](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/security.md), [Observability](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/observability.md), and
-[Routes and permissions](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/routes-and-permissions.md).
+[Routes and permissions](https://github.com/anis-ly/anis.partners-sdk-php/blob/main/docs/routes-and-permissions.md), and [Webhooks](docs/webhooks.md).
 
 ## License
 

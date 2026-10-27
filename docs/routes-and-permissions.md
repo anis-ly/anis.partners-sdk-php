@@ -23,10 +23,46 @@
 | `EnrollmentClient::submitKey()` | `POST /v1/enrollments/{invitationId}/keys` | enrollment token | public key | yes — verified |
 | `EnrollmentClient::submitProof()` / `prove()` | `POST /v1/enrollments/{invitationId}/proof` | enrollment token | proof | yes — verified |
 | `EnrollmentClient::getStatus()` | `GET /v1/enrollments/{invitationId}/status` | enrollment token | none | yes — verified |
+| `meterCharges()->getMeterPackages()` / `getMeterPackagesPage()` | `GET /v1/wallets/{walletId}/meter-packages` | `meter_charges:read` | none | no |
+| `meterCharges()->getMeterCharges()` / `getMeterChargesPage()` | `GET /v1/wallets/{walletId}/meter-charges` | `meter_charges:read` | none | no |
+| `meterCharges()->create()` / `resume()` | `POST /v1/wallets/{walletId}/meter-charges` | `meter_charges:create` | charge JSON | yes — verified |
+| `meterCharges()->get($operationId)` | `GET /v1/meter-charges/{operationId}` | `meter_charges:read` | none | yes — verified |
+| `directRechargeProducts()->getDirectRechargeProducts()` / `getDirectRechargeProductsPage()` | `GET /v1/wallets/{walletId}/direct-recharge-products` | `direct_recharges:read` | none | no |
+| `directRechargeProducts()->get()` | `GET /v1/wallets/{walletId}/direct-recharge-products/{productId}` | `direct_recharges:read` | none | no |
+| `directRechargeProducts()->getDirectRechargeProductLocations()` / `getDirectRechargeProductLocationsPage()` | `GET /v1/wallets/{walletId}/direct-recharge-products/{productId}/locations` | `direct_recharges:read` | none | no |
+| `directRechargeProducts()->quote()` | `GET /v1/wallets/{walletId}/direct-recharge-products/{productId}/quote` | `direct_recharges:read` | none | no |
+| `directRecharges()->getDirectRecharges()` / `getDirectRechargesPage()` | `GET /v1/wallets/{walletId}/direct-recharges` | `direct_recharges:read` | none | no |
+| `directRecharges()->create()` / `resume()` | `POST /v1/wallets/{walletId}/direct-recharges` | `direct_recharges:create` | recharge JSON | yes — verified |
+| `directRecharges()->get($operationId)` | `GET /v1/direct-recharges/{operationId}` | `direct_recharges:read` | none | yes — verified |
+| `directRecharges()->updateRecipient()` | `PATCH /v1/direct-recharges/{operationId}/recipient` | `direct_recharges:create` | recipient JSON | yes — verified |
+| `webhookEndpoint()->get()` | `GET /v1/webhook-endpoint` | none | none | no |
+| `webhookEndpoint()->set()` | `PUT /v1/webhook-endpoint` | none | `{url}` | yes — verified |
+| `webhookEndpoint()->test()` | `POST /v1/webhook-endpoint/test` | none | `{}` | yes — verified |
+| `webhookEvents()->getWebhookEvents()` / `getWebhookEventsPage()` | `GET /v1/webhook-events` | none | none | no |
+| `webhookEvents()->redeliver($eventId)` | `POST /v1/webhook-events/{eventId}/redeliver` | none | `{}` | yes — verified |
 | Internal verification | `GET /.well-known/partner-signing-keys.json` | public | none | no |
 
 List methods return generators and follow every cursor page. The `*Page()` methods return one page when an
-application manages its own cursor. Reveal requests contain zero body bytes; the diagnostic request contains exactly `{}`.
+application manages its own cursor. Reveal requests contain zero body bytes; the diagnostic request contains exactly `{}`. Meter charge and direct recharge reads are filtered by `status`, `from` and `to` (and `meterNumber` or `productId`), newest first, with an optional page size of 1 to 100.
+
+Recipient PATCH returns a signed **202 acknowledgement**, exposed as `DirectRechargeProcessing`, the same result
+as a 202 create: operation id, `retryAfterSeconds`, verified read path in `location`, and a null `read`. Its strict
+three-member wire body is the operation id, `directRecharge` type and `processing` status. Read the direct recharge later or wait for its webhook; the read can lag behind the accepted correction.
+The SDK rejects a missing/wrong Location or an unexpected successful status and never replays the PATCH.
+
+## Meter charge, direct recharge and notification permissions
+
+- `meter_charges:create` lets the application charge a meter and also reads packages, charges and receipts.
+  `meter_charges:read` reads only.
+- `direct_recharges:create` lets the application create a direct recharge and correct a paused recipient, and also reads
+  products, places, quotes and recharges. `direct_recharges:read` reads only.
+- The webhook endpoint and delivery routes need no permission: every application manages its own endpoint. They still
+  need an admitted application and an approved source network.
+- Meter charges and direct recharges count under the same `orders` limit and the application's one daily spending cap
+  as card orders. There is no separate cap per product.
+- Operation reads, the recipient correction and the webhook routes are scoped to your application: another
+  application's operation answers like a missing one.
+- The wallet statement is frozen and excluded from this release.
 
 ## Which answers are verified
 
