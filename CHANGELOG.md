@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- `CreateDirectRechargeRequest::$contactPhone`: an optional phone the Anis exchanges team calls about the direct recharge (a Libyan mobile or an international number). When omitted, Anis uses the phone saved for the partner. It is part of the request's idempotency: the same `Idempotency-Key` with a different value is an `idempotency_conflict`.
+
 ## [2.2.0] - 2026-10-27
 
 ### Added

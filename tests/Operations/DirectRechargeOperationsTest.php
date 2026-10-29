@@ -50,6 +50,7 @@ final class DirectRechargeOperationsTest extends TestCase
             [new DirectRechargeRecipientInput('recipient_number', '01012345678'), new DirectRechargeRecipientInput('recipient_name', 'أحمد علي')],
             'Family support',
             'POS-77-TR-551',
+            '0912345678',
         );
     }
 
@@ -72,7 +73,7 @@ final class DirectRechargeOperationsTest extends TestCase
 
         $sent = $wire->requests[0];
         $body = (string) $sent->getBody();
-        self::assertSame('{"productId":"' . P::PRODUCT . '","payoutAmount":"1500.000","expectedTotal":{"amount":"237.500","currency":"LYD"},"recipient":[{"key":"recipient_number","value":"01012345678"},{"key":"recipient_name","value":"أحمد علي"}],"note":"Family support","externalReference":"POS-77-TR-551"}', $body);
+        self::assertSame('{"productId":"' . P::PRODUCT . '","payoutAmount":"1500.000","expectedTotal":{"amount":"237.500","currency":"LYD"},"recipient":[{"key":"recipient_number","value":"01012345678"},{"key":"recipient_name","value":"أحمد علي"}],"note":"Family support","externalReference":"POS-77-TR-551","contactPhone":"0912345678"}', $body);
         foreach (['price', 'priceWithCommission', 'extraFee', 'operationId', 'customerWhatsappNumber'] as $forbidden) {
             self::assertStringNotContainsString($forbidden, $body);
         }
