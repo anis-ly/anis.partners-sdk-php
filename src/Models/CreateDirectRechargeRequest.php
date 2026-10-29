@@ -18,6 +18,7 @@ final readonly class CreateDirectRechargeRequest implements \JsonSerializable
     /**
      * @param string $payoutAmount The amount paid out in the product currency, as a decimal string with three places.
      * @param array<array-key, mixed> $recipient The recipient details as a list of DirectRechargeRecipientInput.
+     * @param ?string $contactPhone The phone the Anis exchanges team calls about this recharge: a Libyan mobile or an international number. When omitted, Anis uses the phone saved for the partner. It is part of the request's idempotency.
      */
     public function __construct(
         string $productId,
@@ -26,6 +27,7 @@ final readonly class CreateDirectRechargeRequest implements \JsonSerializable
         array $recipient,
         public ?string $note = null,
         public ?string $externalReference = null,
+        public ?string $contactPhone = null,
     ) {
         $this->productId = \Anis\Partners\Internal\Uuid::canonical($productId, 'product id');
         if (preg_match('/\A\d+\.\d{3}\z/D', $payoutAmount) !== 1 || preg_match('/[1-9]/', $payoutAmount) !== 1) {
@@ -65,6 +67,7 @@ final readonly class CreateDirectRechargeRequest implements \JsonSerializable
             $recipient,
             ModelData::nullableString($data, 'note'),
             ModelData::nullableString($data, 'externalReference'),
+            ModelData::nullableString($data, 'contactPhone'),
         );
     }
 
@@ -85,6 +88,9 @@ final readonly class CreateDirectRechargeRequest implements \JsonSerializable
         }
         if ($this->externalReference !== null) {
             $data['externalReference'] = $this->externalReference;
+        }
+        if ($this->contactPhone !== null) {
+            $data['contactPhone'] = $this->contactPhone;
         }
 
         return $data;
