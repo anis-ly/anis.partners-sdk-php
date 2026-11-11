@@ -71,10 +71,13 @@ final class ProductModelsTest extends TestCase
     public function it_rebuilds_a_create_request_from_its_journal_form_with_identical_bytes(): void
     {
         $meter = new \Anis\Partners\Models\CreateMeterChargeRequest(P::PACKAGE, '0268000710262', \Anis\Partners\Models\Money::of('97.500', 'LYD'), 'POS-1');
-        $recharge = new \Anis\Partners\Models\CreateDirectRechargeRequest(P::PRODUCT, '1500.000', \Anis\Partners\Models\Money::of('237.500', 'LYD'), [new \Anis\Partners\Models\DirectRechargeRecipientInput('recipient_number', '01012345678')], 'note');
+        $recharge = new \Anis\Partners\Models\CreateDirectRechargeRequest(P::PRODUCT, '1500.000', \Anis\Partners\Models\Money::of('237.500', 'LYD'), [new \Anis\Partners\Models\DirectRechargeRecipientInput('recipient_number', '01012345678')], 'note', 'POS-1', '0912345678');
 
         self::assertSame($meter->toJson(), \Anis\Partners\Models\CreateMeterChargeRequest::fromArray($meter->toArray())->toJson());
         self::assertSame($recharge->toJson(), \Anis\Partners\Models\CreateDirectRechargeRequest::fromArray($recharge->toArray())->toJson());
+        self::assertSame('0912345678', $recharge->toArray()['contactPhone']);
+        $withoutPhone = new \Anis\Partners\Models\CreateDirectRechargeRequest(P::PRODUCT, '1500.000', \Anis\Partners\Models\Money::of('237.500', 'LYD'), [new \Anis\Partners\Models\DirectRechargeRecipientInput('recipient_number', '01012345678')]);
+        self::assertArrayNotHasKey('contactPhone', $withoutPhone->toArray());
     }
 
     #[Test]
