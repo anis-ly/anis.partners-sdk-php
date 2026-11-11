@@ -35,7 +35,7 @@ use Psr\SimpleCache\CacheInterface;
 /** Provides typed operations over requests that are always signed and answers that are verified on every route Anis signs. */
 final class AnisPartnersClient
 {
-    public const VERSION = '2.2.0';
+    public const VERSION = '2.3.0';
     private function __construct(
         private readonly AccessOperations $accessOperations,
         private readonly ProfileOperations $profileOperations,
